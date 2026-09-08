@@ -48,3 +48,9 @@ Inspect successful headless screenshots and fix any defects; run public deployme
 - Fix `85be114bed694d443bfc3ce2a6e914b06177f9d5`: annotate the receiver and allow 60 seconds for software-rendered screenshots. Local typecheck/build and all 20 tests pass. Clean CI build job 102102288849 also passes.
 - Pages run 34238490431 still fails initial creation with `Resource not accessible by integration` (deploy job 102102417139). Initial Pages configuration remains an owner/admin action. No published-game success is claimed.
 - Browser rerun: https://github.com/ryotamatsuki/racegameastra/actions/runs/34238490476 . FAIL: all four machine screenshots were captured and nine-category installation/save restoration passed their assertions, but the 180-second test-wide timeout expired during explosion/focus operations. Nine remaining tests did not run. No camera, finish, phone-performance or public-environment PASS is inferred. Follow-up uses the actual quality settings UI to select low after medium-quality machine captures, with a 480-second functional test budget.
+
+## Pages enabled and deployed (2026-09-08)
+
+The owner changed Pages Source to GitHub Actions. Failed deploy jobs were rerun: run 34239078466 now succeeds for commit 5afd344afd6f261556cc312cd308e334dcb9cdbf. The exact public URL https://ryotamatsuki.github.io/racegameastra/ was opened in interactive cloud Chrome: the game UI now loads rather than 404. This browser still lacks WebGL 2 and displays the explicit rendering error. Its console had no reported application exception; an extension metadata error is unrelated. Public play remains BLOCKED until successful WebGL browser acceptance.
+
+Browser acceptance now also runs after successful Pages deployments, against the public URL. Desktop and mobile emulation run in separate jobs; failures do not suppress other acceptance cases. A successful deployment alone is not A15 PASS.

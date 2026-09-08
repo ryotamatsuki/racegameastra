@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_run:
+    workflows: ["CI and GitHub Pages"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       public_url:
@@ -13,8 +16,13 @@ permissions:
   contents: read
 jobs:
   browser:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium-desktop, chromium-mobile]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -23,13 +31,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --max-failures=1
+      - run: npx playwright test --project=${{ matrix.project }}
         env:
-          PUBLIC_URL: ${{ inputs.public_url }}
+          PUBLIC_URL: ${{ github.event_name == 'workflow_run' && 'https://ryotamatsuki.github.io/racegameastra/' || inputs.public_url }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-evidence
+          name: browser-evidence-${{ matrix.project }}
           path: |
             test-results/
             playwright-report/
