@@ -1,55 +1,914 @@
-import React,{useEffect,useRef,useState} from 'react';
-import {categories,labels,parts,machines,standard,derive,metrics,type Category,type Setup} from '../data/catalog';
-import {tracks} from '../game/simulation/track';
-import {createRace,tick,Clock,ranking,rankOf,type Race} from '../game/simulation/engine';
-import {Scene} from '../game/rendering/scene';import {Sound} from '../game/audio/sound';
-import {load,persist,storageWarning,type Save} from '../storage/save';
-const cameraNames=['追尾','車載','コース脇','全景','自動演出'];
-function time(n:number|null){return n===null?'—':n.toFixed(3)+' s';}
-export function App(){
- const [saved,setSaved]=useState<Save>(load),[machine,setMachine]=useState(0),[setup,setSetup]=useState<Setup>(()=>standard(0)),[category,setCategory]=useState<Category>('body'),[candidate,setCandidate]=useState<string|null>(null),[screen,setScreen]=useState<'start'|'garage'|'course'|'race'|'result'>('start'),[course,setCourse]=useState(0),[mode,setMode]=useState<'race'|'time'>('race'),[camera,setCamera]=useState(0),[exploded,setExploded]=useState(false),[spin,setSpin]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(storageWarning),[confirm,setConfirm]=useState(false),[expanded,setExpanded]=useState(()=>window.innerWidth>650&&window.innerHeight>650),[frame,setFrame]=useState(0),[seed,setSeed]=useState(731),[lastResult,setLastResult]=useState<number|null>(null),[bestMessage,setBestMessage]=useState('');
- const host=useRef<HTMLDivElement>(null),scene=useRef<Scene|null>(null),race=useRef<Race|null>(null),audio=useRef(new Sound()),saveRef=useRef(saved),screenRef=useRef(screen),clock=useRef(new Clock());saveRef.current=saved;screenRef.current=screen;
- const s=derive(setup),before=metrics(s),preview=candidate?metrics(derive({...setup,[category]:candidate})):before;
- function save(v:Save){setSaved(v);if(!persist(v))setNotice(storageWarning);}
- useEffect(()=>{if(!host.current)return;try{scene.current=new Scene(host.current,saved.settings,msg=>{if(race.current)race.current.phase='paused';setError(msg);});scene.current.showGarage(machine,setup);}catch(e){setError(String(e));}let raf=0,last=performance.now(),hud=0,wasFinished=false,events=0;const animate=(now:number)=>{const dt=(now-last)/1000;last=now;const r=race.current;if(r&&screenRef.current==='race'){if(!clock.current.advance(dt,()=>tick(r))&&r.phase==='running'){r.phase='paused';setNotice('処理が遅延したため停止しました。再開してください。');}if(r.cars[0].events.length>events){events=r.cars[0].events.length;audio.current.beep(230);}if(r.phase==='finished'&&!wasFinished){wasFinished=true;audio.current.beep(1100);const finish=r.cars[0].finish;const key=r.mode+':'+r.track.id,old=saveRef.current.bests[key];if(finish!==null){setBestMessage(old?finish<old?'ベスト更新！ '+(old-finish).toFixed(3)+'秒短縮':'ベストとの差 +'+(finish-old).toFixed(3)+'秒':'初めての完走記録');if(!old||finish<old){const v={...saveRef.current,bests:{...saveRef.current.bests,[key]:finish}};saveRef.current=v;setSaved(v);if(!persist(v))setNotice(storageWarning);}}else setBestMessage('未完走：構成を見直して再挑戦できます。');setScreen('result');}audio.current.motor(r.cars[0].v/r.cars[0].stats.radius*r.cars[0].stats.ratio*30/Math.PI,r.phase==='running');}else{wasFinished=false;events=0;audio.current.motor(0,false);}scene.current?.draw(r,Math.min(dt,.1),r&&r.phase!=='running'?1:clock.current.alpha);if(now-hud>90){hud=now;setFrame(v=>v+1);}raf=requestAnimationFrame(animate);};raf=requestAnimationFrame(animate);
- const visibility=()=>{if(document.hidden&&race.current&&(race.current.phase==='running'||race.current.phase==='countdown')){race.current.phase='paused';clock.current.accumulator=0;audio.current.motor(0,false);setNotice('画面が非表示になったため停止しました。');}};document.addEventListener('visibilitychange',visibility);return()=>{cancelAnimationFrame(raf);document.removeEventListener('visibilitychange',visibility);scene.current?.dispose();audio.current.dispose();};},[]);
- useEffect(()=>{if(!notice)return;const id=setTimeout(()=>setNotice(''),2800);return()=>clearTimeout(id);},[notice]);
- useEffect(()=>{scene.current?.quality(saved.settings);audio.current.volume=saved.settings.volume;audio.current.muted=saved.settings.muted;},[saved.settings]);
- useEffect(()=>{if(scene.current?.mode==='garage')scene.current.updateCar(machine,setup);},[machine,setup]);
- useEffect(()=>{if(scene.current)scene.current.cameraMode=camera;},[camera]);
- function garage(){race.current=null;setScreen('garage');scene.current?.showGarage(machine,setup);setExploded(false);setSpin(false);setConfirm(false);audio.current.motor(0,false);}
- function startRace(){audio.current.unlock();const previous=race.current?.cars[0].finish;if(previous!==undefined)setLastResult(previous);const r=createRace(machine,setup,course,seed,mode);r.phase='countdown';race.current=r;clock.current=new Clock();scene.current?.showRace(r);setCamera(0);if(scene.current)scene.current.cameraMode=0;setScreen('race');setConfirm(false);setNotice('');audio.current.beep(700);}
- function pause(){const r=race.current;if(!r)return;if(r.phase==='running'){r.phase='paused';audio.current.motor(0,false);}else if(r.phase==='paused'){r.phase='running';clock.current.accumulator=0;audio.current.unlock();}setFrame(v=>v+1);}
- function choose(i:number){setMachine(i);setSetup(standard(i));setCandidate(null);setNotice(machines[i].name+' の標準構成を装着しました。');}
- function exchange(){if(!candidate)return;const a=parts[category].find(p=>p.id===candidate);if(!a?.tags.includes('micro-v1')){setNotice('装着規格が一致しません。');return;}setSetup({...setup,[category]:candidate});setNotice(a.name+' を装着しました。');setCandidate(null);audio.current.beep(520);}
- function slot(i:number,restore:boolean){if(restore){const a=saved.slots[i];if(a){setMachine(a.machine);setSetup({...a.setup});setNotice('保存枠 '+(i+1)+' を復元しました。');}}else{const slots=[...saved.slots];slots[i]={machine,setup:{...setup}};save({...saved,slots});setNotice(storageWarning||'保存枠 '+(i+1)+' に保存しました。');}}
- function key(e:React.KeyboardEvent){if(screen!=='race'||['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement).tagName))return;if(e.code==='Space'){e.preventDefault();pause();}if(/^[1-5]$/.test(e.key))setCamera(Number(e.key)-1);if(e.key.toLowerCase()==='r')setConfirm(true);}
- const r=race.current,c=r?.cars[0];
- return <main tabIndex={0} onKeyDown={key} aria-label="ミニ四駆ワークショップ" data-frame={frame} data-phase={r?.phase||screen}>
- <div className="viewport" ref={host} aria-label="3Dマシンとコース"/>
- <header><a href="#" onClick={e=>{e.preventDefault();if(screen==='race')setConfirm(true);else garage();}} className="brand"><span className="brand-mark">M<span> / </span>R</span><span>MICRO RACER<small>ASTRA WORKSHOP · 01</small></span></a><div className="header-right"><span className="status-dot"/> {screen==='race'?'RACE SESSION':'CUSTOM BUILD LAB'}<button aria-label="音の切替" onClick={()=>{audio.current.unlock();save({...saved,settings:{...saved.settings,muted:!saved.settings.muted}});}}>{saved.settings.muted?'音 OFF':'音 ON'}</button></div></header>
- {error&&<div className="modal-backdrop"><section className="dialog" role="alert"><p className="eyebrow">GRAPHICS UNAVAILABLE</p><h2>描画を開始できません</h2><p>{error}</p><button onClick={()=>location.reload()}>再読込して再試行</button></section></div>}
- {screen==='start'&&<section className="welcome"><p className="eyebrow">SMALL MACHINES. REAL TRADE-OFFS.</p><h1>つくる。走る。<br/><em>また、変える。</em></h1><p>机の上から、サーキットへ。<br/>4つのマシン、9つの部品カテゴリ。<br/>あなたのセッティングを、走りで確かめよう。</p><div className="loading-line">準備完了 · ローカル生成3Dモデル</div><button className="primary" disabled={!!error} onClick={()=>{audio.current.unlock();setScreen('garage');}}>ワークショップを開く <span>↗</span></button><small>操作：ドラッグで回転 · ピンチでズーム<br/>音は右上で切り替えられます。</small></section>}
- {(screen==='garage'||screen==='start')&&<div className={'garage-title '+(screen==='start'?'welcome-caption':'')}><p className="eyebrow">{String(machine+1).padStart(2,'0')} / ORIGINAL SERIES</p><h2>{machines[machine].name}</h2><p>{machines[machine].ja}</p></div>}
- {screen==='garage'&&<>
- <nav className="machines" aria-label="機種選択">{machines.map((m,i)=><button key={m.id} aria-pressed={machine===i} onClick={()=>choose(i)}><i style={{background:'#'+m.color.toString(16)}}/>{m.name.replace(' ','\n')}</button>)}</nav>
- <div className="garage-tools"><button aria-pressed={exploded} onClick={()=>{setExploded(!exploded);if(scene.current)scene.current.explodeTarget=exploded?0:1;}}>{exploded?'組み立て':'分解表示'}</button><button onClick={()=>scene.current?.focus(category)}>部品拡大</button><button aria-pressed={spin} onClick={()=>{setSpin(!spin);if(scene.current)scene.current.spin=!spin;}}>車輪テスト</button><button onClick={()=>scene.current?.focus(null)}>視点を戻す</button></div>
- <aside className="performance"><button className="panel-heading" onClick={()=>setExpanded(!expanded)}>BUILD TELEMETRY <span>{expanded?'−':'+'}</span></button>{expanded&&<><h3>走りを、組み立てる。</h3><p className="muted">装着構成から算出 · ゲーム内近似</p>{Object.entries(before).map(([k,v],i)=><div className="stat" key={k}><div><span>{k}</span><strong>{v.toFixed(1)}{k==='総重量'?' g':k==='速度'?' km/h':''}</strong>{candidate&&<em className={preview[k as keyof typeof preview]>=v?'positive':'negative'}>{preview[k as keyof typeof preview]-v>=0?'+':''}{(preview[k as keyof typeof preview]-v).toFixed(1)}</em>}</div><div className="bar"><i style={{width:Math.min(100,v/[55,12,50,80,30,200][i]*100)+'%'}}/></div></div>)}<details><summary>物理入力・装着構成</summary><p>重心 {s.cg.toFixed(3)} m / {s.rpm} rpm<br/>トルク {s.torque} N·m / 効率 {s.efficiency}<br/>ギヤ {s.ratio}:1 / 半径 {s.radius} m<br/>摩擦 {s.grip} / 電圧 {s.voltage} V</p>{categories.map(k=><p key={k}>{labels[k]}：{parts[k].find(p=>p.id===setup[k])?.name}</p>)}</details></>}</aside>
- <section className="parts-panel"><nav aria-label="部品カテゴリ">{categories.map(k=><button key={k} aria-pressed={category===k} onClick={()=>{setCategory(k);setCandidate(null);scene.current?.garage?.highlight(k);}}>{labels[k]}</button>)}</nav><div className="part-options">{parts[category].map((p,i)=><button className={'part-card '+(candidate===p.id?'candidate':'')} key={p.id} aria-pressed={setup[category]===p.id} disabled={!p.tags.includes('micro-v1')} onClick={()=>setCandidate(p.id)}><span className="part-code">{category.toUpperCase()} / 0{i+1}<b>{setup[category]===p.id?'装着中':'比較'}</b></span><strong>{p.name}</strong><span>{p.description}</span><small>{(p.mass*1000).toFixed(1)} g · 共通規格 micro-v1</small></button>)}<button className="install primary" disabled={!candidate} onClick={exchange}>選択部品を装着 ↗</button></div></section>
- <footer className="garage-footer"><div className="save-slots">{saved.slots.map((a,i)=><div key={i}><button onClick={()=>slot(i,false)}>保存 {i+1}</button><button disabled={!a} onClick={()=>slot(i,true)} aria-label={'保存枠'+(i+1)+'を復元'}>↶</button></div>)}<button onClick={()=>{setSetup(standard(machine));setCandidate(null);}}>標準構成</button></div><button className="primary" onClick={()=>setScreen('course')}>コースを選ぶ <span>→</span></button></footer>
- </>}
- {screen==='course'&&<div className="modal-backdrop"><section className="course-dialog"><p className="eyebrow">CHOOSE YOUR PROVING GROUND</p><h2>このマシンを、どこで試す？</h2><div className="course-list">{tracks.map((t,i)=><button key={t.id} aria-pressed={course===i} onClick={()=>setCourse(i)}><span className="course-number">0{i+1}</span><strong>{t.name}</strong><p>{t.description}</p><small>基準レーン {t.lengths[1].toFixed(1)} m / 3 LAPS<br/>BEST {time(saved.bests[mode+':'+i]??null)}</small></button>)}</div><div className="race-options"><label>モード<select value={mode} onChange={e=>setMode(e.target.value as typeof mode)}><option value="race">4台レース</option><option value="time">タイムアタック（基準レーン2）</option></select></label><label>再現seed<input type="number" value={seed} onChange={e=>setSeed(Number(e.target.value)||0)}/></label></div><details><summary>レース前確認：レーンとCPUの公開構成</summary>{createRace(machine,setup,course,seed,mode).cars.map(a=><p key={a.id}>{a.id===0?'YOU':'CPU '+a.id} / レーン{a.lane+1} / {machines[a.machine].name}<br/>{categories.map(k=>parts[k].find(p=>p.id===a.setup[k])?.name).join(' · ')}</p>)}<p>固定レーンには内外差があります。比較走行はタイムアタックを使ってください。</p></details><div className="actions"><button onClick={garage}>ガレージへ戻る</button><button className="primary" onClick={startRace}>この構成で走る →</button></div></section></div>}
- {(screen==='race'||screen==='result')&&r&&c&&<>
- <div className="race-top"><section className="position"><strong>{rankOf(r,c)}<small> / {r.cars.length}</small></strong><span>POSITION</span></section><section><small>LAP</small><strong>{Math.min(3,c.lap+1)} / 3</strong></section><section><small>TIME</small><strong>{r.time.toFixed(2)}</strong></section><section><small>SIM SPEED</small><strong>{(c.v*3.6).toFixed(1)} <small>km/h</small></strong></section></div>
- <div className="leaderboard"><p className="eyebrow">{r.track.name}</p>{ranking(r).map(a=><div key={a.id} className={a.id===0?'you':''}><b>{rankOf(r,a)}</b><i style={{background:'#'+machines[a.machine].color.toString(16)}}/><span>{a.id===0?'YOU':`CPU ${a.id}`}<small>L{a.lane+1} · {a.state==='dnf'?'DNF':a.state==='finished'?'FINISH':Math.min(3,a.lap+1)+'/3'}</small></span></div>)}<svg className="minimap" viewBox="-9 -6 18 12" aria-label="簡易コース図"><polyline points={r.track.lanes[1].filter((_,i)=>i%20===0).map(f=>`${f.p.x},${f.p.z}`).join(' ')} fill="none" stroke="#63756d" strokeWidth=".2"/>{r.cars.map(a=><circle key={a.id} cx={a.p.x} cy={a.p.z} r=".28" fill={'#'+machines[a.machine].color.toString(16)}/>)}</svg></div>
- <div className="race-bottom"><div><p className="eyebrow">{c.state==='recovering'?'復帰まで '+c.recover.toFixed(1)+' s':c.state==='dnf'?'DNF':c.state==='airborne'?'AIRBORNE':r.track.lanes[c.lane][Math.min(2400,Math.floor((c.progress%1)*2400))]?.zone}</p><span>電池 {(c.charge*100).toFixed(1)}% · コースアウト {c.outs}/3 · レーン {c.lane+1}</span></div><nav aria-label="カメラ">{cameraNames.map((name,i)=><button aria-pressed={camera===i} key={name} onClick={()=>setCamera(i)}>{i+1} {name}</button>)}</nav><button onClick={pause}>{r.phase==='paused'?'再開':'一時停止'}</button><button onClick={()=>setConfirm(true)}>再挑戦</button></div>
- {r.phase==='countdown'&&screen==='race'&&<div className="countdown"><span>READY TO RACE</span><strong>{Math.ceil(r.countdown)}</strong></div>}
- {r.phase==='paused'&&screen==='race'&&<div className="pause-card"><h2>PAUSED</h2><p>再開するまで走行時計は進みません。</p><button className="primary" onClick={pause}>走行を再開</button><button onClick={garage}>ガレージへ</button></div>}
- </>}
- {screen==='result'&&r&&c&&<div className="modal-backdrop"><section className="result-dialog"><p className="eyebrow">SESSION COMPLETE / SEED {r.seed}</p><h2>{c.finish!==null?'走りが、答えになった。':'次のセッティングへ。'}</h2><p className="best">{bestMessage}</p>{lastResult!==null&&c.finish!==null&&<p>前回との差 {(c.finish-lastResult).toFixed(3)} s</p>}<div className="table-scroll"><table><thead><tr><th>順位 / マシン</th><th>総時間</th><th>LAP 1</th><th>LAP 2</th><th>LAP 3</th><th>状態</th></tr></thead><tbody>{ranking(r).map(a=><tr key={a.id}><td>{rankOf(r,a)} · {a.id===0?'YOU':'CPU '+a.id}<small>{machines[a.machine].name}</small></td><td>{time(a.finish)}</td>{[0,1,2].map(i=><td key={i}>{time(a.lapTimes[i]??null)}</td>)}<td>{a.state==='finished'?'完走':'DNF'}</td></tr>)}</tbody></table></div><p className="analysis-note">{c.events.some(e=>e.kind==='out')?'コースアウトを記録。ローラー支持・低重心・ブレーキを比較してください。':c.events.some(e=>e.kind==='corner')?'コーナー減速を記録。グリップとローラー支持に改善余地があります。':c.events.some(e=>e.kind==='landing')?'ジャンプ着地で失速を記録。ブレーキと安定性のバランスを比較しましょう。':'大きな走行イベントなし。速度と重量の比較に適した走行でした。'}</p><details><summary>走行イベントと装着構成</summary>{categories.map(k=><p key={k}>{labels[k]}：{parts[k].find(p=>p.id===c.setup[k])?.name}</p>)}{c.events.map((e,i)=><p key={i}>{e.time.toFixed(2)}s · {e.detail}</p>)}</details><div className="actions"><button onClick={garage}>改造する</button><button className="primary" onClick={startRace}>同じ構成・seedで再挑戦 ↗</button></div></section></div>}
- {confirm&&<div className="modal-backdrop confirm"><section className="dialog" role="dialog" aria-modal="true"><h2>レースをやり直しますか？</h2><p>現在の走行記録を破棄し、同じ構成・seedで再スタートします。</p><div className="actions"><button onClick={()=>setConfirm(false)}>キャンセル</button><button className="primary" onClick={startRace}>再挑戦する</button></div></section></div>}
- {notice&&<div className="toast" role="status" onClick={()=>setNotice('')}>{notice} <span>×</span></div>}
- <details className="settings"><summary>設定</summary><label>画質<select value={saved.settings.quality} onChange={e=>save({...saved,settings:{...saved.settings,quality:e.target.value as Save['settings']['quality']}})}><option value="low">低 · DPR 1 / 影なし</option><option value="medium">中 · DPR 1.5 / 影1024</option><option value="high">高 · DPR 2 / 影2048</option></select></label><label>音量<input type="range" min="0" max="1" step=".05" value={saved.settings.volume} onChange={e=>save({...saved,settings:{...saved.settings,volume:Number(e.target.value)}})}/></label><label><input type="checkbox" checked={saved.settings.reduced} onChange={e=>save({...saved,settings:{...saved.settings,reduced:e.target.checked}})}/>動きを減らす</label><details><summary>描画診断</summary><p>{scene.current?.telemetry.calls} draw calls / {scene.current?.telemetry.triangles} triangles<br/>{scene.current?.telemetry.geometries} geometries / {scene.current?.telemetry.textures} textures</p><p>{scene.current?.telemetry.renderer}</p></details></details>
- <div className="portrait-hint">横向きにするとマシンとコースを広く見渡せます。</div>
- </main>;
+import React, { useEffect, useRef, useState } from "react";
+import {
+  categories,
+  labels,
+  parts,
+  machines,
+  standard,
+  derive,
+  metrics,
+  type Category,
+  type Setup,
+} from "../data/catalog";
+import { tracks } from "../game/simulation/track";
+import {
+  createRace,
+  tick,
+  Clock,
+  ranking,
+  rankOf,
+  type Race,
+} from "../game/simulation/engine";
+import { Scene } from "../game/rendering/scene";
+import { Sound } from "../game/audio/sound";
+import { load, persist, storageWarning, type Save } from "../storage/save";
+const cameraNames = ["追尾", "車載", "コース脇", "全景", "自動演出"];
+function time(n: number | null) {
+  return n === null ? "—" : n.toFixed(3) + " s";
+}
+export function App() {
+  const [saved, setSaved] = useState<Save>(load),
+    [machine, setMachine] = useState(0),
+    [setup, setSetup] = useState<Setup>(() => standard(0)),
+    [category, setCategory] = useState<Category>("body"),
+    [candidate, setCandidate] = useState<string | null>(null),
+    [screen, setScreen] = useState<
+      "start" | "garage" | "course" | "race" | "result"
+    >("start"),
+    [course, setCourse] = useState(0),
+    [mode, setMode] = useState<"race" | "time">("race"),
+    [camera, setCamera] = useState(0),
+    [exploded, setExploded] = useState(false),
+    [spin, setSpin] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(storageWarning),
+    [confirm, setConfirm] = useState(false),
+    [expanded, setExpanded] = useState(
+      () => window.innerWidth > 650 && window.innerHeight > 650,
+    ),
+    [frame, setFrame] = useState(0),
+    [seed, setSeed] = useState(731),
+    [lastResult, setLastResult] = useState<number | null>(null),
+    [bestMessage, setBestMessage] = useState("");
+  const host = useRef<HTMLDivElement>(null),
+    scene = useRef<Scene | null>(null),
+    race = useRef<Race | null>(null),
+    audio = useRef(new Sound()),
+    saveRef = useRef(saved),
+    screenRef = useRef(screen),
+    clock = useRef(new Clock());
+  saveRef.current = saved;
+  screenRef.current = screen;
+  const s = derive(setup),
+    before = metrics(s),
+    preview = candidate
+      ? metrics(derive({ ...setup, [category]: candidate }))
+      : before;
+  function save(v: Save) {
+    setSaved(v);
+    if (!persist(v)) setNotice(storageWarning);
+  }
+  useEffect(() => {
+    if (!host.current) return;
+    try {
+      scene.current = new Scene(host.current, saved.settings, (msg) => {
+        if (race.current) race.current.phase = "paused";
+        setError(msg);
+      });
+      scene.current.showGarage(machine, setup);
+    } catch (e) {
+      setError(String(e));
+    }
+    let raf = 0,
+      last = performance.now(),
+      hud = 0,
+      wasFinished = false,
+      events = 0;
+    const animate = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      const r = race.current;
+      if (r && screenRef.current === "race") {
+        if (
+          !clock.current.advance(dt, () => tick(r)) &&
+          r.phase === "running"
+        ) {
+          r.phase = "paused";
+          setNotice("処理が遅延したため停止しました。再開してください。");
+        }
+        if (r.cars[0].events.length > events) {
+          events = r.cars[0].events.length;
+          audio.current.beep(230);
+        }
+        if (r.phase === "finished" && !wasFinished) {
+          wasFinished = true;
+          audio.current.beep(1100);
+          const finish = r.cars[0].finish;
+          const key = r.mode + ":" + r.track.id,
+            old = saveRef.current.bests[key];
+          if (finish !== null) {
+            setBestMessage(
+              old
+                ? finish < old
+                  ? "ベスト更新！ " + (old - finish).toFixed(3) + "秒短縮"
+                  : "ベストとの差 +" + (finish - old).toFixed(3) + "秒"
+                : "初めての完走記録",
+            );
+            if (!old || finish < old) {
+              const v = {
+                ...saveRef.current,
+                bests: { ...saveRef.current.bests, [key]: finish },
+              };
+              saveRef.current = v;
+              setSaved(v);
+              if (!persist(v)) setNotice(storageWarning);
+            }
+          } else setBestMessage("未完走：構成を見直して再挑戦できます。");
+          setScreen("result");
+        }
+        audio.current.motor(
+          ((r.cars[0].v / r.cars[0].stats.radius) *
+            r.cars[0].stats.ratio *
+            30) /
+            Math.PI,
+          r.phase === "running",
+        );
+      } else {
+        wasFinished = false;
+        events = 0;
+        audio.current.motor(0, false);
+      }
+      scene.current?.draw(
+        r,
+        Math.min(dt, 0.1),
+        r && r.phase !== "running" ? 1 : clock.current.alpha,
+      );
+      if (now - hud > 90) {
+        hud = now;
+        setFrame((v) => v + 1);
+      }
+      raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    const visibility = () => {
+      if (
+        document.hidden &&
+        race.current &&
+        (race.current.phase === "running" || race.current.phase === "countdown")
+      ) {
+        race.current.phase = "paused";
+        clock.current.accumulator = 0;
+        audio.current.motor(0, false);
+        setNotice("画面が非表示になったため停止しました。");
+      }
+    };
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", visibility);
+      scene.current?.dispose();
+      audio.current.dispose();
+    };
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const id = setTimeout(() => setNotice(""), 2800);
+    return () => clearTimeout(id);
+  }, [notice]);
+  useEffect(() => {
+    scene.current?.quality(saved.settings);
+    audio.current.volume = saved.settings.volume;
+    audio.current.muted = saved.settings.muted;
+  }, [saved.settings]);
+  useEffect(() => {
+    if (scene.current?.mode === "garage")
+      scene.current.updateCar(machine, setup);
+  }, [machine, setup]);
+  useEffect(() => {
+    if (scene.current) scene.current.cameraMode = camera;
+  }, [camera]);
+  function garage() {
+    race.current = null;
+    setScreen("garage");
+    scene.current?.showGarage(machine, setup);
+    setExploded(false);
+    setSpin(false);
+    setConfirm(false);
+    audio.current.motor(0, false);
+  }
+  function startRace() {
+    audio.current.unlock();
+    const previous = race.current?.cars[0].finish;
+    if (previous !== undefined) setLastResult(previous);
+    const r = createRace(machine, setup, course, seed, mode);
+    r.phase = "countdown";
+    race.current = r;
+    clock.current = new Clock();
+    scene.current?.showRace(r);
+    setCamera(0);
+    if (scene.current) scene.current.cameraMode = 0;
+    setScreen("race");
+    setConfirm(false);
+    setNotice("");
+    audio.current.beep(700);
+  }
+  function pause() {
+    const r = race.current;
+    if (!r) return;
+    if (r.phase === "running") {
+      r.phase = "paused";
+      audio.current.motor(0, false);
+    } else if (r.phase === "paused") {
+      r.phase = "running";
+      clock.current.accumulator = 0;
+      audio.current.unlock();
+    }
+    setFrame((v) => v + 1);
+  }
+  function choose(i: number) {
+    setMachine(i);
+    setSetup(standard(i));
+    setCandidate(null);
+    setNotice(machines[i].name + " の標準構成を装着しました。");
+  }
+  function exchange() {
+    if (!candidate) return;
+    const a = parts[category].find((p) => p.id === candidate);
+    if (!a?.tags.includes("micro-v1")) {
+      setNotice("装着規格が一致しません。");
+      return;
+    }
+    setSetup({ ...setup, [category]: candidate });
+    setNotice(a.name + " を装着しました。");
+    setCandidate(null);
+    audio.current.beep(520);
+  }
+  function slot(i: number, restore: boolean) {
+    if (restore) {
+      const a = saved.slots[i];
+      if (a) {
+        setMachine(a.machine);
+        setSetup({ ...a.setup });
+        setNotice("保存枠 " + (i + 1) + " を復元しました。");
+      }
+    } else {
+      const slots = [...saved.slots];
+      slots[i] = { machine, setup: { ...setup } };
+      save({ ...saved, slots });
+      setNotice(storageWarning || "保存枠 " + (i + 1) + " に保存しました。");
+    }
+  }
+  function key(e: React.KeyboardEvent) {
+    if (
+      screen !== "race" ||
+      ["INPUT", "SELECT", "TEXTAREA"].includes(
+        (e.target as HTMLElement).tagName,
+      )
+    )
+      return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      pause();
+    }
+    if (/^[1-5]$/.test(e.key)) setCamera(Number(e.key) - 1);
+    if (e.key.toLowerCase() === "r") setConfirm(true);
+  }
+  const r = race.current,
+    c = r?.cars[0];
+  return (
+    <main
+      tabIndex={0}
+      onKeyDown={key}
+      aria-label="ミニ四駆ワークショップ"
+      data-frame={frame}
+      data-phase={r?.phase || screen}
+    >
+      <div className="viewport" ref={host} aria-label="3Dマシンとコース" />
+      <header>
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            if (screen === "race") setConfirm(true);
+            else garage();
+          }}
+          className="brand"
+        >
+          <span className="brand-mark">
+            M<span> / </span>R
+          </span>
+          <span>
+            MICRO RACER<small>ASTRA WORKSHOP · 01</small>
+          </span>
+        </a>
+        <div className="header-right">
+          <span className="status-dot" />{" "}
+          {screen === "race" ? "RACE SESSION" : "CUSTOM BUILD LAB"}
+          <button
+            aria-label="音の切替"
+            onClick={() => {
+              audio.current.unlock();
+              save({
+                ...saved,
+                settings: { ...saved.settings, muted: !saved.settings.muted },
+              });
+            }}
+          >
+            {saved.settings.muted ? "音 OFF" : "音 ON"}
+          </button>
+        </div>
+      </header>
+      {error && (
+        <div className="modal-backdrop">
+          <section className="dialog" role="alert">
+            <p className="eyebrow">GRAPHICS UNAVAILABLE</p>
+            <h2>描画を開始できません</h2>
+            <p>{error}</p>
+            <button onClick={() => location.reload()}>再読込して再試行</button>
+          </section>
+        </div>
+      )}
+      {screen === "start" && (
+        <section className="welcome">
+          <p className="eyebrow">SMALL MACHINES. REAL TRADE-OFFS.</p>
+          <h1>
+            つくる。走る。
+            <br />
+            <em>また、変える。</em>
+          </h1>
+          <p>
+            机の上から、サーキットへ。
+            <br />
+            4つのマシン、9つの部品カテゴリ。
+            <br />
+            あなたのセッティングを、走りで確かめよう。
+          </p>
+          <div className="loading-line">準備完了 · ローカル生成3Dモデル</div>
+          <button
+            className="primary"
+            disabled={!!error}
+            onClick={() => {
+              audio.current.unlock();
+              setScreen("garage");
+            }}
+          >
+            ワークショップを開く <span>↗</span>
+          </button>
+          <small>
+            操作：ドラッグで回転 · ピンチでズーム
+            <br />
+            音は右上で切り替えられます。
+          </small>
+        </section>
+      )}
+      {(screen === "garage" || screen === "start") && (
+        <div
+          className={
+            "garage-title " + (screen === "start" ? "welcome-caption" : "")
+          }
+        >
+          <p className="eyebrow">
+            {String(machine + 1).padStart(2, "0")} / ORIGINAL SERIES
+          </p>
+          <h2>{machines[machine].name}</h2>
+          <p>{machines[machine].ja}</p>
+        </div>
+      )}
+      {screen === "garage" && (
+        <>
+          <nav className="machines" aria-label="機種選択">
+            {machines.map((m, i) => (
+              <button
+                key={m.id}
+                aria-pressed={machine === i}
+                onClick={() => choose(i)}
+              >
+                <i style={{ background: "#" + m.color.toString(16) }} />
+                {m.name.replace(" ", "\n")}
+              </button>
+            ))}
+          </nav>
+          <div className="garage-tools">
+            <button
+              aria-pressed={exploded}
+              onClick={() => {
+                setExploded(!exploded);
+                if (scene.current)
+                  scene.current.explodeTarget = exploded ? 0 : 1;
+              }}
+            >
+              {exploded ? "組み立て" : "分解表示"}
+            </button>
+            <button onClick={() => scene.current?.focus(category)}>
+              部品拡大
+            </button>
+            <button
+              aria-pressed={spin}
+              onClick={() => {
+                setSpin(!spin);
+                if (scene.current) scene.current.spin = !spin;
+              }}
+            >
+              車輪テスト
+            </button>
+            <button onClick={() => scene.current?.focus(null)}>
+              視点を戻す
+            </button>
+          </div>
+          <aside className="performance">
+            <button
+              className="panel-heading"
+              onClick={() => setExpanded(!expanded)}
+            >
+              BUILD TELEMETRY <span>{expanded ? "−" : "+"}</span>
+            </button>
+            {expanded && (
+              <>
+                <h3>走りを、組み立てる。</h3>
+                <p className="muted">装着構成から算出 · ゲーム内近似</p>
+                {Object.entries(before).map(([k, v], i) => (
+                  <div className="stat" key={k}>
+                    <div>
+                      <span>{k}</span>
+                      <strong>
+                        {v.toFixed(1)}
+                        {k === "総重量" ? " g" : k === "速度" ? " km/h" : ""}
+                      </strong>
+                      {candidate && (
+                        <em
+                          className={
+                            preview[k as keyof typeof preview] >= v
+                              ? "positive"
+                              : "negative"
+                          }
+                        >
+                          {preview[k as keyof typeof preview] - v >= 0
+                            ? "+"
+                            : ""}
+                          {(preview[k as keyof typeof preview] - v).toFixed(1)}
+                        </em>
+                      )}
+                    </div>
+                    <div className="bar">
+                      <i
+                        style={{
+                          width:
+                            Math.min(
+                              100,
+                              (v / [55, 12, 50, 80, 30, 200][i]) * 100,
+                            ) + "%",
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <details>
+                  <summary>物理入力・装着構成</summary>
+                  <p>
+                    重心 {s.cg.toFixed(3)} m / {s.rpm} rpm
+                    <br />
+                    トルク {s.torque} N·m / 効率 {s.efficiency}
+                    <br />
+                    ギヤ {s.ratio}:1 / 半径 {s.radius} m<br />
+                    摩擦 {s.grip} / 電圧 {s.voltage} V
+                  </p>
+                  {categories.map((k) => (
+                    <p key={k}>
+                      {labels[k]}：
+                      {parts[k].find((p) => p.id === setup[k])?.name}
+                    </p>
+                  ))}
+                </details>
+              </>
+            )}
+          </aside>
+          <section className="parts-panel">
+            <nav aria-label="部品カテゴリ">
+              {categories.map((k) => (
+                <button
+                  key={k}
+                  aria-pressed={category === k}
+                  onClick={() => {
+                    setCategory(k);
+                    setCandidate(null);
+                    scene.current?.garage?.highlight(k);
+                  }}
+                >
+                  {labels[k]}
+                </button>
+              ))}
+            </nav>
+            <div className="part-options">
+              {parts[category].map((p, i) => (
+                <button
+                  className={
+                    "part-card " + (candidate === p.id ? "candidate" : "")
+                  }
+                  key={p.id}
+                  aria-pressed={setup[category] === p.id}
+                  disabled={!p.tags.includes("micro-v1")}
+                  onClick={() => setCandidate(p.id)}
+                >
+                  <span className="part-code">
+                    {category.toUpperCase()} / 0{i + 1}
+                    <b>{setup[category] === p.id ? "装着中" : "比較"}</b>
+                  </span>
+                  <strong>{p.name}</strong>
+                  <span>{p.description}</span>
+                  <small>
+                    {(p.mass * 1000).toFixed(1)} g · 共通規格 micro-v1
+                  </small>
+                </button>
+              ))}
+              <button
+                className="install primary"
+                disabled={!candidate}
+                onClick={exchange}
+              >
+                選択部品を装着 ↗
+              </button>
+            </div>
+          </section>
+          <footer className="garage-footer">
+            <div className="save-slots">
+              {saved.slots.map((a, i) => (
+                <div key={i}>
+                  <button onClick={() => slot(i, false)}>保存 {i + 1}</button>
+                  <button
+                    disabled={!a}
+                    onClick={() => slot(i, true)}
+                    aria-label={"保存枠" + (i + 1) + "を復元"}
+                  >
+                    ↶
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  setSetup(standard(machine));
+                  setCandidate(null);
+                }}
+              >
+                標準構成
+              </button>
+            </div>
+            <button className="primary" onClick={() => setScreen("course")}>
+              コースを選ぶ <span>→</span>
+            </button>
+          </footer>
+        </>
+      )}
+      {screen === "course" && (
+        <div className="modal-backdrop">
+          <section className="course-dialog">
+            <p className="eyebrow">CHOOSE YOUR PROVING GROUND</p>
+            <h2>このマシンを、どこで試す？</h2>
+            <div className="course-list">
+              {tracks.map((t, i) => (
+                <button
+                  key={t.id}
+                  aria-pressed={course === i}
+                  onClick={() => setCourse(i)}
+                >
+                  <span className="course-number">0{i + 1}</span>
+                  <strong>{t.name}</strong>
+                  <p>{t.description}</p>
+                  <small>
+                    基準レーン {t.lengths[1].toFixed(1)} m / 3 LAPS
+                    <br />
+                    BEST {time(saved.bests[mode + ":" + i] ?? null)}
+                  </small>
+                </button>
+              ))}
+            </div>
+            <div className="race-options">
+              <label>
+                モード
+                <select
+                  aria-label="モード"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as typeof mode)}
+                >
+                  <option value="race">4台レース</option>
+                  <option value="time">タイムアタック（基準レーン2）</option>
+                </select>
+              </label>
+              <label>
+                再現seed
+                <input
+                  type="number"
+                  value={seed}
+                  onChange={(e) => setSeed(Number(e.target.value) || 0)}
+                />
+              </label>
+            </div>
+            <details>
+              <summary>レース前確認：レーンとCPUの公開構成</summary>
+              {createRace(machine, setup, course, seed, mode).cars.map((a) => (
+                <p key={a.id}>
+                  {a.id === 0 ? "YOU" : "CPU " + a.id} / レーン{a.lane + 1} /{" "}
+                  {machines[a.machine].name}
+                  <br />
+                  {categories
+                    .map((k) => parts[k].find((p) => p.id === a.setup[k])?.name)
+                    .join(" · ")}
+                </p>
+              ))}
+              <p>
+                固定レーンには内外差があります。比較走行はタイムアタックを使ってください。
+              </p>
+            </details>
+            <div className="actions">
+              <button onClick={garage}>ガレージへ戻る</button>
+              <button className="primary" onClick={startRace}>
+                この構成で走る →
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {(screen === "race" || screen === "result") && r && c && (
+        <>
+          <div className="race-top">
+            <section className="position">
+              <strong>
+                {rankOf(r, c)}
+                <small> / {r.cars.length}</small>
+              </strong>
+              <span>POSITION</span>
+            </section>
+            <section>
+              <small>LAP</small>
+              <strong>{Math.min(3, c.lap + 1)} / 3</strong>
+            </section>
+            <section>
+              <small>TIME</small>
+              <strong>{r.time.toFixed(2)}</strong>
+            </section>
+            <section>
+              <small>SIM SPEED</small>
+              <strong>
+                {(c.v * 3.6).toFixed(1)} <small>km/h</small>
+              </strong>
+            </section>
+          </div>
+          <div className="leaderboard">
+            <p className="eyebrow">{r.track.name}</p>
+            {ranking(r).map((a) => (
+              <div key={a.id} className={a.id === 0 ? "you" : ""}>
+                <b>{rankOf(r, a)}</b>
+                <i
+                  style={{
+                    background: "#" + machines[a.machine].color.toString(16),
+                  }}
+                />
+                <span>
+                  {a.id === 0 ? "YOU" : `CPU ${a.id}`}
+                  <small>
+                    L{a.lane + 1} ·{" "}
+                    {a.state === "dnf"
+                      ? "DNF"
+                      : a.state === "finished"
+                        ? "FINISH"
+                        : Math.min(3, a.lap + 1) + "/3"}
+                  </small>
+                </span>
+              </div>
+            ))}
+            <svg
+              className="minimap"
+              viewBox="-9 -6 18 12"
+              aria-label="簡易コース図"
+            >
+              <polyline
+                points={r.track.lanes[1]
+                  .filter((_, i) => i % 20 === 0)
+                  .map((f) => `${f.p.x},${f.p.z}`)
+                  .join(" ")}
+                fill="none"
+                stroke="#63756d"
+                strokeWidth=".2"
+              />
+              {r.cars.map((a) => (
+                <circle
+                  key={a.id}
+                  cx={a.p.x}
+                  cy={a.p.z}
+                  r=".28"
+                  fill={"#" + machines[a.machine].color.toString(16)}
+                />
+              ))}
+            </svg>
+          </div>
+          <div className="race-bottom">
+            <div>
+              <p className="eyebrow">
+                {c.state === "recovering"
+                  ? "復帰まで " + c.recover.toFixed(1) + " s"
+                  : c.state === "dnf"
+                    ? "DNF"
+                    : c.state === "airborne"
+                      ? "AIRBORNE"
+                      : r.track.lanes[c.lane][
+                          Math.min(2400, Math.floor((c.progress % 1) * 2400))
+                        ]?.zone}
+              </p>
+              <span>
+                電池 {(c.charge * 100).toFixed(1)}% · コースアウト {c.outs}/3 ·
+                レーン {c.lane + 1}
+              </span>
+            </div>
+            <nav aria-label="カメラ">
+              {cameraNames.map((name, i) => (
+                <button
+                  aria-pressed={camera === i}
+                  key={name}
+                  onClick={() => setCamera(i)}
+                >
+                  {i + 1} {name}
+                </button>
+              ))}
+            </nav>
+            <button onClick={pause}>
+              {r.phase === "paused" ? "再開" : "一時停止"}
+            </button>
+            <button onClick={() => setConfirm(true)}>再挑戦</button>
+          </div>
+          {r.phase === "countdown" && screen === "race" && (
+            <div className="countdown">
+              <span>READY TO RACE</span>
+              <strong>{Math.ceil(r.countdown)}</strong>
+            </div>
+          )}
+          {r.phase === "paused" && screen === "race" && (
+            <div className="pause-card">
+              <h2>PAUSED</h2>
+              <p>再開するまで走行時計は進みません。</p>
+              <button className="primary" onClick={pause}>
+                走行を再開
+              </button>
+              <button onClick={garage}>ガレージへ</button>
+            </div>
+          )}
+        </>
+      )}
+      {screen === "result" && r && c && (
+        <div className="modal-backdrop">
+          <section className="result-dialog">
+            <p className="eyebrow">SESSION COMPLETE / SEED {r.seed}</p>
+            <h2>
+              {c.finish !== null
+                ? "走りが、答えになった。"
+                : "次のセッティングへ。"}
+            </h2>
+            <p className="best">{bestMessage}</p>
+            {lastResult !== null && c.finish !== null && (
+              <p>前回との差 {(c.finish - lastResult).toFixed(3)} s</p>
+            )}
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>順位 / マシン</th>
+                    <th>総時間</th>
+                    <th>LAP 1</th>
+                    <th>LAP 2</th>
+                    <th>LAP 3</th>
+                    <th>状態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranking(r).map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        {rankOf(r, a)} · {a.id === 0 ? "YOU" : "CPU " + a.id}
+                        <small>{machines[a.machine].name}</small>
+                      </td>
+                      <td>{time(a.finish)}</td>
+                      {[0, 1, 2].map((i) => (
+                        <td key={i}>{time(a.lapTimes[i] ?? null)}</td>
+                      ))}
+                      <td>{a.state === "finished" ? "完走" : "DNF"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="analysis-note">
+              {c.events.some((e) => e.kind === "out")
+                ? "コースアウトを記録。ローラー支持・低重心・ブレーキを比較してください。"
+                : c.events.some((e) => e.kind === "corner")
+                  ? "コーナー減速を記録。グリップとローラー支持に改善余地があります。"
+                  : c.events.some((e) => e.kind === "landing")
+                    ? "ジャンプ着地で失速を記録。ブレーキと安定性のバランスを比較しましょう。"
+                    : "大きな走行イベントなし。速度と重量の比較に適した走行でした。"}
+            </p>
+            <details>
+              <summary>走行イベントと装着構成</summary>
+              {categories.map((k) => (
+                <p key={k}>
+                  {labels[k]}：{parts[k].find((p) => p.id === c.setup[k])?.name}
+                </p>
+              ))}
+              {c.events.map((e, i) => (
+                <p key={i}>
+                  {e.time.toFixed(2)}s · {e.detail}
+                </p>
+              ))}
+            </details>
+            <div className="actions">
+              <button onClick={garage}>改造する</button>
+              <button className="primary" onClick={startRace}>
+                同じ構成・seedで再挑戦 ↗
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {confirm && (
+        <div className="modal-backdrop confirm">
+          <section className="dialog" role="dialog" aria-modal="true">
+            <h2>レースをやり直しますか？</h2>
+            <p>現在の走行記録を破棄し、同じ構成・seedで再スタートします。</p>
+            <div className="actions">
+              <button onClick={() => setConfirm(false)}>キャンセル</button>
+              <button className="primary" onClick={startRace}>
+                再挑戦する
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {notice && (
+        <div className="toast" role="status" onClick={() => setNotice("")}>
+          {notice} <span>×</span>
+        </div>
+      )}
+      <details className="settings">
+        <summary>設定</summary>
+        <label>
+          画質
+          <select
+            value={saved.settings.quality}
+            onChange={(e) =>
+              save({
+                ...saved,
+                settings: {
+                  ...saved.settings,
+                  quality: e.target.value as Save["settings"]["quality"],
+                },
+              })
+            }
+          >
+            <option value="low">低 · DPR 1 / 影なし</option>
+            <option value="medium">中 · DPR 1.5 / 影1024</option>
+            <option value="high">高 · DPR 2 / 影2048</option>
+          </select>
+        </label>
+        <label>
+          音量
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step=".05"
+            value={saved.settings.volume}
+            onChange={(e) =>
+              save({
+                ...saved,
+                settings: { ...saved.settings, volume: Number(e.target.value) },
+              })
+            }
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={saved.settings.reduced}
+            onChange={(e) =>
+              save({
+                ...saved,
+                settings: { ...saved.settings, reduced: e.target.checked },
+              })
+            }
+          />
+          動きを減らす
+        </label>
+        <details>
+          <summary>描画診断</summary>
+          <p>
+            {scene.current?.telemetry.calls} draw calls /{" "}
+            {scene.current?.telemetry.triangles} triangles
+            <br />
+            {scene.current?.telemetry.geometries} geometries /{" "}
+            {scene.current?.telemetry.textures} textures
+          </p>
+          <p>{scene.current?.telemetry.renderer}</p>
+        </details>
+      </details>
+      <div className="portrait-hint">
+        横向きにするとマシンとコースを広く見渡せます。
+      </div>
+    </main>
+  );
 }

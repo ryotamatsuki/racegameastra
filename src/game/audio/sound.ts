@@ -1,5 +1,52 @@
-export class Sound {ctx:AudioContext|null=null;osc:OscillatorNode|null=null;gain:GainNode|null=null;volume=.2;muted=true;
- unlock(){if(!this.ctx){this.ctx=new AudioContext();this.osc=this.ctx.createOscillator();this.gain=this.ctx.createGain();this.osc.type='sawtooth';this.gain.gain.value=0;this.osc.connect(this.gain).connect(this.ctx.destination);this.osc.start();}void this.ctx.resume();}
- motor(rpm:number,active:boolean){if(this.ctx&&this.osc&&this.gain){this.osc.frequency.setTargetAtTime(Math.max(50,rpm/60*2),this.ctx.currentTime,.08);this.gain.gain.setTargetAtTime(active&&!this.muted?this.volume*.025:0,this.ctx.currentTime,.03);}}
- beep(freq=600){if(!this.ctx||this.muted)return;const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.frequency.value=freq;g.gain.setValueAtTime(this.volume*.15,this.ctx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,this.ctx.currentTime+.18);o.connect(g).connect(this.ctx.destination);o.start();o.stop(this.ctx.currentTime+.2);o.onended=()=>{o.disconnect();g.disconnect();};}
- dispose(){this.osc?.stop();void this.ctx?.close();}}
+export class Sound {
+  ctx: AudioContext | null = null;
+  osc: OscillatorNode | null = null;
+  gain: GainNode | null = null;
+  volume = 0.2;
+  muted = true;
+  unlock() {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      this.osc = this.ctx.createOscillator();
+      this.gain = this.ctx.createGain();
+      this.osc.type = "sawtooth";
+      this.gain.gain.value = 0;
+      this.osc.connect(this.gain).connect(this.ctx.destination);
+      this.osc.start();
+    }
+    void this.ctx.resume();
+  }
+  motor(rpm: number, active: boolean) {
+    if (this.ctx && this.osc && this.gain) {
+      this.osc.frequency.setTargetAtTime(
+        Math.max(50, (rpm / 60) * 2),
+        this.ctx.currentTime,
+        0.08,
+      );
+      this.gain.gain.setTargetAtTime(
+        active && !this.muted ? this.volume * 0.025 : 0,
+        this.ctx.currentTime,
+        0.03,
+      );
+    }
+  }
+  beep(freq = 600) {
+    if (!this.ctx || this.muted) return;
+    const o = this.ctx.createOscillator(),
+      g = this.ctx.createGain();
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(this.volume * 0.15, this.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.18);
+    o.connect(g).connect(this.ctx.destination);
+    o.start();
+    o.stop(this.ctx.currentTime + 0.2);
+    o.onended = () => {
+      o.disconnect();
+      g.disconnect();
+    };
+  }
+  dispose() {
+    this.osc?.stop();
+    void this.ctx?.close();
+  }
+}

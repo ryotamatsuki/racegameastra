@@ -1,5 +1,53 @@
-import test from 'node:test';import assert from 'node:assert/strict';import * as T from 'three';import {buildCar,disposeObject} from '../src/game/rendering/car';import {standard,categories,parts,derive} from '../src/data/catalog';import {tracks,dot,cross} from '../src/game/simulation/track';
-test('four original body meshes are geometrically distinct, finite and nonempty',()=>{const signatures=[];for(let i=0;i<4;i++){const c=buildCar(i,standard(i));const shell=c.groups.body.children[0] as T.Mesh;const p=shell.geometry.getAttribute('position');assert.ok(p.count>50);assert.ok(Array.from(p.array).every(Number.isFinite));signatures.push(JSON.stringify(Array.from(p.array)));disposeObject(c.root);}assert.equal(new Set(signatures).size,4);});
-test('repeated explosion and assembly preserve objects and restore placement',()=>{const c=buildCar(0,standard(0));let initial=0;c.root.traverse(()=>initial++);for(let i=0;i<30;i++){c.explode(1);assert.ok(c.wheels[0].position.z*c.wheels[1].position.z<0);c.explode(0);}let final=0;c.root.traverse(()=>final++);assert.equal(initial,final);for(const g of Object.values(c.groups))assert.equal(g.position.length(),0);assert.ok(c.wheels.every(w=>Math.abs(Math.abs(w.position.z)-.044)<1e-12));disposeObject(c.root);});
-test('each category has three physically distinct options',()=>{for(const cat of categories){const stats=parts[cat].map(p=>JSON.stringify(derive({...standard(0),[cat]:p.id})));assert.equal(new Set(stats).size,3,cat);}});
-test('render frame uses a right-handed orthonormal basis',()=>{for(const t of tracks)for(const lane of t.lanes)for(let i=0;i<lane.length;i+=5){const f=lane[i];assert.ok(Math.abs(dot(f.t,cross(f.n,f.side))-1)<1e-6);}});
+import test from "node:test";
+import assert from "node:assert/strict";
+import * as T from "three";
+import { buildCar, disposeObject } from "../src/game/rendering/car";
+import { standard, categories, parts, derive } from "../src/data/catalog";
+import { tracks, dot, cross } from "../src/game/simulation/track";
+test("four original body meshes are geometrically distinct, finite and nonempty", () => {
+  const signatures = [];
+  for (let i = 0; i < 4; i++) {
+    const c = buildCar(i, standard(i));
+    const shell = c.groups.body.children[0] as T.Mesh;
+    const p = shell.geometry.getAttribute("position");
+    assert.ok(p.count > 50);
+    assert.ok(Array.from(p.array).every(Number.isFinite));
+    signatures.push(JSON.stringify(Array.from(p.array)));
+    disposeObject(c.root);
+  }
+  assert.equal(new Set(signatures).size, 4);
+});
+test("repeated explosion and assembly preserve objects and restore placement", () => {
+  const c = buildCar(0, standard(0));
+  let initial = 0;
+  c.root.traverse(() => initial++);
+  for (let i = 0; i < 30; i++) {
+    c.explode(1);
+    assert.ok(c.wheels[0].position.z * c.wheels[1].position.z < 0);
+    c.explode(0);
+  }
+  let final = 0;
+  c.root.traverse(() => final++);
+  assert.equal(initial, final);
+  for (const g of Object.values(c.groups)) assert.equal(g.position.length(), 0);
+  assert.ok(
+    c.wheels.every((w) => Math.abs(Math.abs(w.position.z) - 0.044) < 1e-12),
+  );
+  disposeObject(c.root);
+});
+test("each category has three physically distinct options", () => {
+  for (const cat of categories) {
+    const stats = parts[cat].map((p) =>
+      JSON.stringify(derive({ ...standard(0), [cat]: p.id })),
+    );
+    assert.equal(new Set(stats).size, 3, cat);
+  }
+});
+test("render frame uses a right-handed orthonormal basis", () => {
+  for (const t of tracks)
+    for (const lane of t.lanes)
+      for (let i = 0; i < lane.length; i += 5) {
+        const f = lane[i];
+        assert.ok(Math.abs(dot(f.t, cross(f.n, f.side)) - 1) < 1e-6);
+      }
+});

@@ -1,17 +1,158 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {standard,derive,categories,parts,validSetup} from '../src/data/catalog';
-import {driveForce,runBench,createRace,tick,Clock,DT,contactAcceleration} from '../src/game/simulation/engine';
-import {tracks,atU,dot,length,sub} from '../src/game/simulation/track';
-test('catalog has 4 machines, 9 categories, 3 compatible parts each; all alter physics',()=>{for(let i=0;i<4;i++){assert.ok(validSetup(standard(i)));for(const c of categories)for(const p of parts[c]){const s={...standard(i),[c]:p.id};assert.ok(validSetup(s));assert.ok(derive(s).mass>0);}}assert.ok(!validSetup({}));});
-test('A05 torque and gear reflect drive equation',()=>{const base=standard(0);const speed=derive({...base,motor:'motor-speed'}),torque=derive({...base,motor:'motor-torque'});assert.ok(driveForce(torque,0)>driveForce(speed,0));assert.ok(driveForce(speed,8)>driveForce(torque,8));const low=derive({...base,gear:'gear-speed'}),high=derive({...base,gear:'gear-power'});assert.ok(driveForce(high,0)>driveForce(low,0));assert.ok(driveForce(low,8)>driveForce(high,8));});
-test('standard machines finish oval',()=>{for(let i=0;i<4;i++){const c=runBench(standard(i),0);assert.equal(c.state,'finished',JSON.stringify({i,state:c.state,events:c.events}));assert.equal(c.lapTimes.length,3);}});
-test('A09 same model has no player-specific physics',()=>{const a=createRace(0,standard(0),0),b=createRace(0,standard(0),0);a.phase=b.phase='running';b.cars[0].id=9;for(let i=0;i<1200;i++){tick(a);tick(b);}assert.equal(a.cars[0].s,b.cars[0].s);assert.equal(a.cars[0].charge,b.cars[0].charge);});
-test('A10 30/60/120 rendering produces identical fixed steps',()=>{const outcomes=[30,60,120].map(fps=>{const r=createRace(0,standard(0),0);r.phase='running';const clock=new Clock();for(let i=0;i<fps*10;i++)clock.advance(1/fps,()=>tick(r));return [r.time,r.cars[0].s];});assert.deepEqual(outcomes[0],outcomes[1]);assert.deepEqual(outcomes[1],outcomes[2]);});
-test('loop support sign and frame continuity',()=>{const t=tracks[2],f=atU(t,1,.65);assert.ok(f.n.y<-.99);assert.ok(contactAcceleration(f,.1)<0);assert.ok(contactAcceleration(f,5)>0);for(const t of tracks)for(const fs of t.lanes){for(let i=1;i<fs.length;i++){assert.ok(Number.isFinite(fs[i].s));assert.ok(dot(fs[i].n,fs[i-1].n)>-.1,`frame flip ${t.id} ${i}`);}assert.ok(length(sub(fs[0].p,fs.at(-1)!.p))<1e-9);}});
-test('DNF time limit and finished records freeze',()=>{const r=createRace(0,standard(0),0);r.phase='running';r.cars.forEach(c=>c.stats.torque=0);while(r.phase==='running')tick(r);assert.ok(r.cars.every(c=>c.state==='dnf'));const a=runBench(standard(0),0);assert.ok(a.finish!==null);});
-test('long frame requests pause without hidden catchup',()=>{const c=new Clock();let n=0;assert.equal(c.advance(.5,()=>n++),false);assert.equal(n,0);});
-test('A06 fixed-lane tradeoff reverses between oval and technical',()=>{const a=standard(0),b={...a,gear:'gear-power',tire:'tire-grip'};const a0=runBench(a,0).finish!,b0=runBench(b,0).finish!,a1=runBench(a,1).finish!,b1=runBench(b,1).finish!;assert.ok(a0<b0);assert.ok(a1>b1);});
-test('A07 three-course standard Falcon completes with physical landings',()=>{for(let i=0;i<3;i++){const c=runBench(standard(0),i);assert.equal(c.state,'finished');assert.equal(c.lapTimes.length,3);if(i>0)assert.equal(c.events.filter(e=>e.detail.startsWith('着地衝撃')).length,3);}});
-test('A08 underpowered loop loses support and reaches DNF',()=>{const c=runBench(standard(1),2);assert.equal(c.state,'dnf');assert.equal(c.outs,3);assert.ok(c.events.some(e=>e.kind==='loop'));});
-test('all 4 machines finish oval on all seeded lanes',()=>{for(let m=0;m<4;m++)for(let seed=0;seed<4;seed++){const r=createRace(m,standard(m),0,seed);r.phase='running';while(r.phase==='running')tick(r);assert.equal(r.cars[0].state,'finished',`machine ${m}, lane seed ${seed}`);}});
-test('battery mass and discharge are coupled to drive',()=>{const a=derive({...standard(0),battery:'battery-light'}),b=derive({...standard(0),battery:'battery-power'});assert.ok(a.mass<b.mass);assert.ok(driveForce(b,0)>driveForce(a,0));assert.ok(driveForce(b,0,.1)<driveForce(b,0,1));assert.ok(runBench(standard(0),0).charge<1);});
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  standard,
+  derive,
+  categories,
+  parts,
+  validSetup,
+} from "../src/data/catalog";
+import {
+  driveForce,
+  runBench,
+  createRace,
+  tick,
+  Clock,
+  DT,
+  contactAcceleration,
+} from "../src/game/simulation/engine";
+import { tracks, atU, dot, length, sub } from "../src/game/simulation/track";
+test("catalog has 4 machines, 9 categories, 3 compatible parts each; all alter physics", () => {
+  for (let i = 0; i < 4; i++) {
+    assert.ok(validSetup(standard(i)));
+    for (const c of categories)
+      for (const p of parts[c]) {
+        const s = { ...standard(i), [c]: p.id };
+        assert.ok(validSetup(s));
+        assert.ok(derive(s).mass > 0);
+      }
+  }
+  assert.ok(!validSetup({}));
+});
+test("A05 torque and gear reflect drive equation", () => {
+  const base = standard(0);
+  const speed = derive({ ...base, motor: "motor-speed" }),
+    torque = derive({ ...base, motor: "motor-torque" });
+  assert.ok(driveForce(torque, 0) > driveForce(speed, 0));
+  assert.ok(driveForce(speed, 8) > driveForce(torque, 8));
+  const low = derive({ ...base, gear: "gear-speed" }),
+    high = derive({ ...base, gear: "gear-power" });
+  assert.ok(driveForce(high, 0) > driveForce(low, 0));
+  assert.ok(driveForce(low, 8) > driveForce(high, 8));
+});
+test("standard machines finish oval", () => {
+  for (let i = 0; i < 4; i++) {
+    const c = runBench(standard(i), 0);
+    assert.equal(
+      c.state,
+      "finished",
+      JSON.stringify({ i, state: c.state, events: c.events }),
+    );
+    assert.equal(c.lapTimes.length, 3);
+  }
+});
+test("A09 same model has no player-specific physics", () => {
+  const a = createRace(0, standard(0), 0),
+    b = createRace(0, standard(0), 0);
+  a.phase = b.phase = "running";
+  b.cars[0].id = 9;
+  for (let i = 0; i < 1200; i++) {
+    tick(a);
+    tick(b);
+  }
+  assert.equal(a.cars[0].s, b.cars[0].s);
+  assert.equal(a.cars[0].charge, b.cars[0].charge);
+});
+test("A10 30/60/120 rendering produces identical fixed steps", () => {
+  const outcomes = [30, 60, 120].map((fps) => {
+    const r = createRace(0, standard(0), 0);
+    r.phase = "running";
+    const clock = new Clock();
+    for (let i = 0; i < fps * 10; i++) clock.advance(1 / fps, () => tick(r));
+    return [r.time, r.cars[0].s];
+  });
+  assert.deepEqual(outcomes[0], outcomes[1]);
+  assert.deepEqual(outcomes[1], outcomes[2]);
+});
+test("loop support sign and frame continuity", () => {
+  const t = tracks[2],
+    f = atU(t, 1, 0.65);
+  assert.ok(f.n.y < -0.99);
+  assert.ok(contactAcceleration(f, 0.1) < 0);
+  assert.ok(contactAcceleration(f, 5) > 0);
+  for (const t of tracks)
+    for (const fs of t.lanes) {
+      for (let i = 1; i < fs.length; i++) {
+        assert.ok(Number.isFinite(fs[i].s));
+        assert.ok(dot(fs[i].n, fs[i - 1].n) > -0.1, `frame flip ${t.id} ${i}`);
+      }
+      assert.ok(length(sub(fs[0].p, fs.at(-1)!.p)) < 1e-9);
+    }
+});
+test("DNF time limit and finished records freeze", () => {
+  const r = createRace(0, standard(0), 0);
+  r.phase = "running";
+  r.cars.forEach((c) => (c.stats.torque = 0));
+  while (r.phase === "running") tick(r);
+  assert.ok(r.cars.every((c) => c.state === "dnf"));
+  const a = runBench(standard(0), 0);
+  assert.ok(a.finish !== null);
+});
+test("long frame requests pause without hidden catchup", () => {
+  const c = new Clock();
+  let n = 0;
+  assert.equal(
+    c.advance(0.5, () => n++),
+    false,
+  );
+  assert.equal(n, 0);
+});
+test("A06 fixed-lane tradeoff reverses between oval and technical", () => {
+  const a = standard(0),
+    b = { ...a, gear: "gear-power", tire: "tire-grip" };
+  const a0 = runBench(a, 0).finish!,
+    b0 = runBench(b, 0).finish!,
+    a1 = runBench(a, 1).finish!,
+    b1 = runBench(b, 1).finish!;
+  assert.ok(a0 < b0);
+  assert.ok(a1 > b1);
+});
+test("A07 three-course standard Falcon completes with physical landings", () => {
+  for (let i = 0; i < 3; i++) {
+    const c = runBench(standard(0), i);
+    assert.equal(c.state, "finished");
+    assert.equal(c.lapTimes.length, 3);
+    if (i > 0)
+      assert.equal(
+        c.events.filter((e) => e.detail.startsWith("着地衝撃")).length,
+        3,
+      );
+  }
+});
+test("A08 underpowered loop loses support and reaches DNF", () => {
+  const c = runBench(standard(1), 2);
+  assert.equal(c.state, "dnf");
+  assert.equal(c.outs, 3);
+  assert.ok(c.events.some((e) => e.kind === "loop"));
+});
+test("all 4 machines finish oval on all seeded lanes", () => {
+  for (let m = 0; m < 4; m++)
+    for (let seed = 0; seed < 4; seed++) {
+      const r = createRace(m, standard(m), 0, seed);
+      r.phase = "running";
+      while (r.phase === "running") tick(r);
+      assert.equal(
+        r.cars[0].state,
+        "finished",
+        `machine ${m}, lane seed ${seed}`,
+      );
+    }
+});
+test("battery mass and discharge are coupled to drive", () => {
+  const a = derive({ ...standard(0), battery: "battery-light" }),
+    b = derive({ ...standard(0), battery: "battery-power" });
+  assert.ok(a.mass < b.mass);
+  assert.ok(driveForce(b, 0) > driveForce(a, 0));
+  assert.ok(driveForce(b, 0, 0.1) < driveForce(b, 0, 1));
+  assert.ok(runBench(standard(0), 0).charge < 1);
+});
