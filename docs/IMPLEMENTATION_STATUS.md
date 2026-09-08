@@ -15,3 +15,11 @@ Implemented typed 4-machine/27-part catalog, common fixed-step simulation, curve
 - CI npm ci/typecheck/model tests/build succeeded. Pages enablement was denied by integration permission. Interactive cloud Chrome cannot create WebGL 2; explicit error UI was inspected. Public URL is currently 404.
 - Browser acceptance on GitHub-hosted headless Chromium is in progress. Its images must be inspected before any rendered-view PASS.
 - See QA_REPORT.md for the acceptance matrix; this project is not yet a verified public completion.
+
+## Milestone 3 — four-lap lane cycle
+- Rebased the change on main `398f0efcf87f6ca178d0d2014877670e99e52176`, preserving the completed-lane separation and finish-pose regression fix.
+- Normal race and time attack now run four laps. Each lap advances to the next of four lanes, so every car traverses all four lanes exactly once regardless of its seed-based starting lane.
+- The final 12% of every course is a smooth lane-change route; arc-length state is remapped at the timing line to prevent false laps or render jumps when lane lengths differ.
+- Existing course styling is retained. Internal dividers open only in the lane-change zone, while the two exterior course walls remain in place.
+- HUD, result table, best-time keys, README, architecture notes and GAME_SPEC were updated for four-lap semantics. Legacy three-lap bests are not compared with the new records.
+- Branch validation passed `npm ci`, `npm run typecheck`, `npm test`, and `npm run build`, including new regression tests for lane-change continuity, four-lane visitation and four-lap completion. Pull-request browser acceptance is the final gate before merge.
