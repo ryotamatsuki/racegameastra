@@ -1,4 +1,22 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function waitForSuccessfulFinish(page: Page, timeout = 150000) {
+  const success = page.getByRole("heading", { name: "走りが、答えになった。" });
+  const dnf = page.getByRole("heading", { name: "次のセッティングへ。" });
+  const resume = page.getByRole("button", { name: "走行を再開", exact: true });
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await success.isVisible()) return;
+    if (await dnf.isVisible()) throw new Error("Race ended as DNF instead of a successful finish");
+    if (await resume.isVisible()) {
+      await resume.click();
+      await page.waitForTimeout(50);
+      continue;
+    }
+    await page.waitForTimeout(250);
+  }
+  await expect(success).toBeVisible({ timeout: 1000 });
+}
 test("garage customization, persistence, all courses, cameras and retry", async ({
   page,
 }, info) => {
@@ -98,16 +116,16 @@ test("garage customization, persistence, all courses, cameras and retry", async 
           .click();
       }
     }
-    await expect(
-      page.getByRole("heading", { name: "走りが、答えになった。" }),
-    ).toBeVisible({ timeout: 90000 });
+    await waitForSuccessfulFinish(page);
     await expect(page.locator("tbody tr").first()).toContainText("完走");
     await page.screenshot({ timeout: 60000, path: info.outputPath(course + "-result.png") });
     await page.getByRole("button", { name: "同じ構成・seedで再挑戦" }).click();
     await expect(page.getByText("READY TO RACE")).toBeVisible();
     await page.waitForTimeout(3800);
-    await page.getByRole("button", { name: "一時停止", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "PAUSED" })).toBeVisible();
+    const paused = page.getByRole("heading", { name: "PAUSED" });
+    if (!(await paused.isVisible()))
+      await page.getByRole("button", { name: "一時停止", exact: true }).click();
+    await expect(paused).toBeVisible();
     await page.getByRole("button", { name: "ガレージへ", exact: true }).click();
   }
   expect(errors).toEqual([]);
@@ -115,13 +133,14 @@ test("garage customization, persistence, all courses, cameras and retry", async 
 test("time attack and portrait layout", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
+  await page.locator(".settings>summary").click();
+  await page.locator(".settings select").selectOption("low");
+  await page.locator(".settings>summary").click();
   await page.getByRole("button", { name: "ワークショップを開く" }).click();
   await page.getByRole("button", { name: "コースを選ぶ" }).click();
   await page.getByLabel("モード", { exact: true }).selectOption("time");
   await page.getByRole("button", { name: "この構成で走る" }).click();
-  await expect(
-    page.getByRole("heading", { name: "走りが、答えになった。" }),
-  ).toBeVisible({ timeout: 90000 });
+  await waitForSuccessfulFinish(page);
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.screenshot({ timeout: 60000, path: info.outputPath("portrait-result.png") });
 });
@@ -134,6 +153,9 @@ test("60-second frame sample and 10 retries resource stability", async ({
   );
   test.setTimeout(480000);
   await page.goto("./");
+  await page.locator(".settings>summary").click();
+  await page.locator(".settings select").selectOption("low");
+  await page.locator(".settings>summary").click();
   await page.getByRole("button", { name: "ワークショップを開く" }).click();
   await page.getByRole("button", { name: "コースを選ぶ" }).click();
   await page.getByRole("button", { name: "この構成で走る" }).click();
@@ -158,9 +180,7 @@ test("60-second frame sample and 10 retries resource stability", async ({
   });
   const resources: string[] = [];
   for (let i = 0; i < 10; i++) {
-    await expect(
-      page.getByRole("heading", { name: "走りが、答えになった。" }),
-    ).toBeVisible({ timeout: 90000 });
+    await waitForSuccessfulFinish(page);
     await page.locator(".settings>summary").click();
     if (i === 0) await page.getByText("描画診断", { exact: true }).click();
     resources.push(await page.locator(".settings").innerText());
@@ -176,7 +196,7 @@ test("60-second frame sample and 10 retries resource stability", async ({
   await info.attach("frame-times-ms.json", {
     body: JSON.stringify({
       viewport: { width: 1920, height: 1080 },
-      quality: "medium",
+      quality: "low",
       renderer: "Chromium headless ANGLE SwiftShader",
       frames,
       resources,

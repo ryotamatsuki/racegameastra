@@ -8,7 +8,7 @@ Read GAME_SPEC.md in full at main `3463066033b7aac602ba0e6b9887806c1313f9a5`. It
 
 - `src/data/catalog.ts`: 4 original silhouettes, 27 interchangeable parts (9 × 3), compatibility tags, SI physical values, and common derived metrics. Geometry and physics read the same Setup IDs. All released parts use micro-v1; invalid IDs are rejected.
 - `src/game/simulation/track.ts`: independent arc-length tables for 4 lanes, shared by road mesh and simulation; tangent, normal, lateral direction, curvature vector, bank, gap and brake zones. 2,400 samples per lap; binary search and interpolation by arc length. Horizontal loops and vertical loop have explicit consistent normals.
-- `src/game/simulation/engine.ts`: DOM-free common player/CPU integrator and race state machine. No player-specific speed multiplier. Seed rotates lane assignments and chooses visible standard CPU configurations. Time attack uses lane 2 for all builds.
+- `src/game/simulation/engine.ts`: DOM-free common player/CPU integrator and race state machine. No player-specific speed multiplier. Seed rotates starting-lane assignments and chooses visible standard CPU configurations; every lap advances to the next lane, so four laps traverse all four lanes once in both race and time-attack modes.
 - `src/game/rendering/car.ts`: lofted curved body shells, canopy, vents, stripes, beveled chassis, wheels/hubs/spokes, roller assemblies, motor, gears, batteries, wing and brake. Garage keeps movable part groups; race merges fixed geometry by material and retains rotating wheels.
 - `src/game/rendering/scene.ts`: PBR environment generated locally, light, shadow, workshop/track scenes, resource disposal and render diagnostics.
 - `src/game/audio/sound.ts`: user-activated Web Audio oscillator, RPM pitch, transient tones, mute and volume.
@@ -39,9 +39,9 @@ Brake pads act only in explicit pre-jump zones and above 3.5 m/s. This avoids a 
 
 ## Timing, states and ranking
 
-Fixed step 1/120 s; max 30 substeps. Frames longer than 0.25 s request a pause, rather than silently skipping race time. Render position is interpolated between states. Three laps; crossing times linearly interpolated within the fixed step. Finished records freeze. Rank uses lap plus shared course parameter (checkpoint progression), never raw lane distance. Equal finish times share rank; ID stabilizes row ordering only.
+Fixed step 1/120 s; max 30 substeps. Frames longer than 0.25 s request a pause, rather than silently skipping race time. Render position is interpolated between states. Four laps; the final 12% of each lap smoothly blends onto the next lane and crossing times are linearly interpolated within the fixed step. Arc coordinates are remapped at the timing line to the new lane length so no false lap or render jump is introduced. Finished records freeze. Rank uses lap plus shared course parameter (checkpoint progression), never raw lane distance. Equal finish times share rank; ID stabilizes row ordering only.
 
-Recovery lasts 2 simulation seconds, race time continues, third out is DNF, and 180 s is an absolute race timeout. Visibility pauses require explicit resume. Retry recreates cars, clock, countdown and camera with the same seed.
+Recovery lasts 2 simulation seconds, race time continues, third out is DNF, and 240 s is an absolute race timeout. Visibility pauses require explicit resume. Retry recreates cars, clock, countdown and camera with the same seed.
 
 ## Metrics
 

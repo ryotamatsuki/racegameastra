@@ -10,7 +10,7 @@ import {
   type Category,
   type Setup,
 } from "../data/catalog";
-import { tracks } from "../game/simulation/track";
+import { tracks, RACE_LAPS, routeSample } from "../game/simulation/track";
 import {
   createRace,
   tick,
@@ -89,12 +89,19 @@ export function App() {
       last = now;
       const r = race.current;
       if (r && screenRef.current === "race") {
-        if (
-          !clock.current.advance(dt, () => tick(r)) &&
-          r.phase === "running"
-        ) {
-          r.phase = "paused";
-          setNotice("処理が遅延したため停止しました。再開してください。");
+        const phaseBeforeAdvance = r.phase,
+          advanced = clock.current.advance(dt, () => tick(r));
+        if (!advanced) {
+          if (phaseBeforeAdvance === "countdown") {
+            // Countdown is presentation time, not vehicle physics. A very slow
+            // render frame must not deadlock READY forever; advance it by at
+            // most one second while still discarding any physics catch-up.
+            tick(r, Math.min(dt, 1));
+            clock.current.accumulator = 0;
+          } else if (phaseBeforeAdvance === "running") {
+            r.phase = "paused";
+            setNotice("処理が遅延したため停止しました。再開してください。");
+          }
         }
         if (r.cars[0].events.length > events) {
           events = r.cars[0].events.length;
@@ -104,7 +111,7 @@ export function App() {
           wasFinished = true;
           audio.current.beep(1100);
           const finish = r.cars[0].finish;
-          const key = r.mode + ":" + r.track.id + (r.track.id === 0 ? ":lanes-v2" : ""),
+          const key = r.mode + ":" + r.track.id + ":lane-cycle-v1",
             old = saveRef.current.bests[key];
           if (finish !== null) {
             setBestMessage(
@@ -574,9 +581,9 @@ export function App() {
                   <strong>{t.name}</strong>
                   <p>{t.description}</p>
                   <small>
-                    基準レーン {t.lengths[1].toFixed(1)} m / 3 LAPS
+                    4レーン1巡 / 4 LAPS
                     <br />
-                    BEST {time(saved.bests[mode + ":" + i + (i === 0 ? ":lanes-v2" : "")] ?? null)}
+                    BEST {time(saved.bests[mode + ":" + i + ":lane-cycle-v1"] ?? null)}
                   </small>
                 </button>
               ))}
@@ -590,7 +597,7 @@ export function App() {
                   onChange={(e) => setMode(e.target.value as typeof mode)}
                 >
                   <option value="race">4台レース</option>
-                  <option value="time">タイムアタック（基準レーン2）</option>
+                  <option value="time">タイムアタック（4レーン1巡）</option>
                 </select>
               </label>
               <label>
@@ -603,7 +610,7 @@ export function App() {
               </label>
             </div>
             <details>
-              <summary>レース前確認：レーンとCPUの公開構成</summary>
+              <summary>レース前確認：スタートレーンとCPUの公開構成</summary>
               {createRace(machine, setup, course, seed, mode).cars.map((a) => (
                 <p key={a.id}>
                   {a.id === 0 ? "YOU" : "CPU " + a.id} / レーン{a.lane + 1} /{" "}
@@ -615,7 +622,7 @@ export function App() {
                 </p>
               ))}
               <p>
-                固定レーンには内外差があります。比較走行はタイムアタックを使ってください。
+                4周で全車が4レーンを1回ずつ走行し、周回終盤のレーンチェンジャーで次レーンへ移ります。
               </p>
             </details>
             <div className="actions">
@@ -639,7 +646,7 @@ export function App() {
             </section>
             <section>
               <small>LAP</small>
-              <strong>{Math.min(3, c.lap + 1)} / 3</strong>
+              <strong>{Math.min(RACE_LAPS, c.lap + 1)} / {RACE_LAPS}</strong>
             </section>
             <section>
               <small>TIME</small>
@@ -670,7 +677,7 @@ export function App() {
                       ? "DNF"
                       : a.state === "finished"
                         ? "FINISH"
-                        : Math.min(3, a.lap + 1) + "/3"}
+                        : Math.min(RACE_LAPS, a.lap + 1) + "/" + RACE_LAPS}
                   </small>
                 </span>
               </div>
@@ -709,9 +716,7 @@ export function App() {
                     ? "DNF"
                     : c.state === "airborne"
                       ? "AIRBORNE"
-                      : r.track.lanes[c.lane][
-                          Math.min(2400, Math.floor((c.progress % 1) * 2400))
-                        ]?.zone}
+                      : routeSample(r.track, c.lane, c.s).zone}
               </p>
               <span>
                 電池 {(c.charge * 100).toFixed(1)}% · コースアウト {c.outs}/3 ·
@@ -774,6 +779,7 @@ export function App() {
                     <th>LAP 1</th>
                     <th>LAP 2</th>
                     <th>LAP 3</th>
+                    <th>LAP 4</th>
                     <th>状態</th>
                   </tr>
                 </thead>
@@ -785,7 +791,7 @@ export function App() {
                         <small>{machines[a.machine].name}</small>
                       </td>
                       <td>{time(a.finish)}</td>
-                      {[0, 1, 2].map((i) => (
+                      {[0, 1, 2, 3].map((i) => (
                         <td key={i}>{time(a.lapTimes[i] ?? null)}</td>
                       ))}
                       <td>{a.state === "finished" ? "完走" : "DNF"}</td>

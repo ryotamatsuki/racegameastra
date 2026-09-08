@@ -16,7 +16,16 @@ import {
   DT,
   contactAcceleration,
 } from "../src/game/simulation/engine";
-import { tracks, atU, dot, length, sub } from "../src/game/simulation/track";
+import {
+  tracks,
+  atU,
+  dot,
+  length,
+  sub,
+  routeSample,
+  RACE_LAPS,
+  LANE_COUNT,
+} from "../src/game/simulation/track";
 test("catalog has 4 machines, 9 categories, 3 compatible parts each; all alter physics", () => {
   for (let i = 0; i < 4; i++) {
     assert.ok(validSetup(standard(i)));
@@ -48,7 +57,7 @@ test("standard machines finish oval", () => {
       "finished",
       JSON.stringify({ i, state: c.state, events: c.events }),
     );
-    assert.equal(c.lapTimes.length, 3);
+    assert.equal(c.lapTimes.length, 4);
   }
 });
 test("A09 same model has no player-specific physics", () => {
@@ -107,7 +116,7 @@ test("long frame requests pause without hidden catchup", () => {
   );
   assert.equal(n, 0);
 });
-test("A06 fixed-lane tradeoff reverses between oval and technical", () => {
+test("A06 four-lane-cycle tradeoff reverses between oval and technical", () => {
   const a = standard(0),
     b = { ...a, gear: "gear-power", tire: "tire-grip" };
   const a0 = runBench(a, 0).finish!,
@@ -121,11 +130,11 @@ test("A07 three-course standard Falcon completes with physical landings", () => 
   for (let i = 0; i < 3; i++) {
     const c = runBench(standard(0), i);
     assert.equal(c.state, "finished");
-    assert.equal(c.lapTimes.length, 3);
+    assert.equal(c.lapTimes.length, 4);
     if (i > 0)
       assert.equal(
         c.events.filter((e) => e.detail.startsWith("着地衝撃")).length,
-        3,
+        4,
       );
   }
 });
@@ -167,6 +176,42 @@ test("all courses keep four lane centers separated, including start and finish",
         );
     }
 });
+test("lane changer joins continuously to the next lane on every course", () => {
+  for (const track of tracks)
+    for (let lane = 0; lane < LANE_COUNT; lane++) {
+      const before = routeSample(track, lane, track.lengths[lane] - 1e-5).p,
+        after = routeSample(track, (lane + 1) % LANE_COUNT, 0).p;
+      assert.ok(
+        length(sub(before, after)) < 0.002,
+        `lane-change discontinuity: course ${track.id}, lane ${lane}`,
+      );
+    }
+});
+
+test("four-lap races visit all four lanes exactly once", () => {
+  for (let course = 0; course < 3; course++)
+    for (let seed = 0; seed < LANE_COUNT; seed++) {
+      const r = createRace(0, standard(0), course, seed),
+        c = r.cars[0],
+        startLane = c.lane,
+        visited = [c.lane];
+      let observedLap = 0;
+      r.phase = "running";
+      while (r.phase === "running") {
+        tick(r);
+        if (c.lap > observedLap) {
+          observedLap = c.lap;
+          if (c.lap < RACE_LAPS) visited.push(c.lane);
+        }
+      }
+      assert.equal(c.state, "finished", `course ${course}, seed ${seed}`);
+      assert.equal(c.lap, RACE_LAPS);
+      assert.equal(c.lapTimes.length, RACE_LAPS);
+      assert.equal(new Set(visited).size, LANE_COUNT);
+      assert.equal(c.lane, startLane);
+    }
+});
+
 test("stationary cars never receive laps or a finish on any course", () => {
   for (let course = 0; course < 3; course++) {
     const r = createRace(0, standard(0), course, 731);
@@ -181,7 +226,7 @@ test("stationary cars never receive laps or a finish on any course", () => {
     }
   }
 });
-test("finish requires three traversed laps and freezes a distinct lane pose", () => {
+test("finish requires four traversed laps and freezes a distinct lane pose", () => {
   for (let course = 0; course < 3; course++)
     for (let machine = 0; machine < 4; machine++) {
       const r = createRace(machine, standard(machine), course, 731);
@@ -191,8 +236,8 @@ test("finish requires three traversed laps and freezes a distinct lane pose", ()
         for (const c of r.cars) {
           if (c.finish === null) assert.notEqual(c.state, "finished");
           else {
-            assert.ok(c.s >= 3 * r.track.lengths[c.lane]);
-            assert.equal(c.lapTimes.length, 3);
+            assert.ok(c.s >= RACE_LAPS * r.track.lengths[c.lane]);
+            assert.equal(c.lapTimes.length, 4);
             assert.equal(c.previousS, c.s);
           }
         }
