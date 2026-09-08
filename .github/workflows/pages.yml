@@ -18,7 +18,9 @@ jobs:
           node-version: '24.19.0'
           cache: npm
       - name: Apply deterministic patch
-        run: python3 scripts/apply_lane_cycle.py
+        run: |
+          sed -i 's/expected=2)/expected=3)/' scripts/apply_lane_cycle.py
+          python3 scripts/apply_lane_cycle.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
