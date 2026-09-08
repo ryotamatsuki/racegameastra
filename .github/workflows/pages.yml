@@ -1,45 +1,34 @@
 name: CI and GitHub Pages
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
+    branches: [fix/four-lap-lane-change]
 permissions:
-  contents: read
-concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  contents: write
 jobs:
-  build:
+  apply-lane-cycle:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: fix/four-lap-lane-change
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '24.19.0'
           cache: npm
+      - name: Apply deterministic patch
+        run: python3 scripts/apply_lane_cycle.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v4
-        if: github.event_name != 'pull_request'
-        with:
-          path: dist
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/deploy-pages@v4
-        id: deployment
+      - name: Commit verified source changes and restore CI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout 398f0efcf87f6ca178d0d2014877670e99e52176 -- .github/workflows/pages.yml
+          git rm -f scripts/apply_lane_cycle.py .github/workflows/apply-lane-cycle.yml
+          git add src tests docs README.md .github/workflows/pages.yml
+          git commit -m "feat: add four-lap lane cycle [lane-cycle-applied]"
+          git push origin HEAD:fix/four-lap-lane-change
