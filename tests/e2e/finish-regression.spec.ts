@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-test('separated oval lanes from countdown through actual finish', async ({ page }, info) => {
+test('four-lap oval lane cycle from countdown through actual finish', async ({ page }, info) => {
   test.setTimeout(240000);
   await page.setViewportSize({ width: 960, height: 640 });
   const errors: string[] = [];
@@ -23,6 +23,7 @@ test('separated oval lanes from countdown through actual finish', async ({ page 
   await expect(result).toBeVisible();
   await expect(page.locator('tbody tr')).toHaveCount(4);
   for (const row of await page.locator('tbody tr').all()) await expect(row).toContainText('完走');
+  await expect(page.getByRole('columnheader', { name: 'LAP 4' })).toBeVisible();
   await page.screenshot({ path: info.outputPath('oval-finish.png'), timeout: 60000 });
   await info.attach('environment.json', { body: JSON.stringify({ url: page.url(), viewport: page.viewportSize(), quality: 'low', pauses, errors }), contentType: 'application/json' });
   expect(errors).toEqual([]);

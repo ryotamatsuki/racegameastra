@@ -46,6 +46,9 @@ export type Track = {
   jump: { start: number; end: number } | null;
 };
 export const trackNames = ["WORKSHOP OVAL", "TECHNICAL RIDGE", "SKY LOOP"];
+export const LANE_COUNT = 4;
+export const RACE_LAPS = 4;
+export const LANE_CHANGE_START = 0.88;
 const N = 2400;
 // Smooth closed centerline; loop is an explicit vertical circle inserted into the north straight.
 function raw(
@@ -153,7 +156,7 @@ function raw(
 export function makeTrack(id: number): Track {
   const lanes: Frame[][] = [],
     lengths: number[] = [];
-  for (let lane = 0; lane < 4; lane++) {
+  for (let lane = 0; lane < LANE_COUNT; lane++) {
     const f: Frame[] = [];
     let s = 0;
     for (let i = 0; i <= N; i++) {
@@ -246,6 +249,75 @@ export function sample(track: Track, lane: number, s: number): Frame {
     k: mix(a.k, b.k),
   };
 }
+
+function frameAtU(track: Track, lane: number, u: number): Frame {
+  const arr = track.lanes[lane],
+    x = Math.max(0, Math.min(N, u * N)),
+    lo = Math.min(N - 1, Math.floor(x)),
+    hi = Math.min(N, lo + 1),
+    q = x - lo,
+    a = arr[lo],
+    b = arr[hi],
+    mix = (a: V, b: V) => add(mul(a, 1 - q), mul(b, q));
+  return {
+    ...a,
+    p: mix(a.p, b.p),
+    t: norm(mix(a.t, b.t)),
+    n: norm(mix(a.n, b.n)),
+    side: norm(mix(a.side, b.side)),
+    k: mix(a.k, b.k),
+    curvature: a.curvature * (1 - q) + b.curvature * q,
+    bank: a.bank * (1 - q) + b.bank * q,
+    u,
+    s: a.s + (b.s - a.s) * q,
+  };
+}
+
+// The physical four-lane bed remains unchanged until the final 12% of a lap.
+// In that zone each racing route blends to the next lane with a smoothstep.
+// The route endpoint therefore coincides with the next lane's start point, so
+// switching lane indices at the timing line is continuous rather than a teleport.
+export function routeSample(track: Track, lane: number, s: number): Frame {
+  const base = sample(track, lane, s);
+  if (base.u < LANE_CHANGE_START) return base;
+  const nextLane = (lane + 1) % LANE_COUNT,
+    target = frameAtU(track, nextLane, base.u),
+    x = Math.max(
+      0,
+      Math.min(1, (base.u - LANE_CHANGE_START) / (1 - LANE_CHANGE_START)),
+    ),
+    q = x * x * (3 - 2 * x),
+    dqdu = (6 * x * (1 - x)) / (1 - LANE_CHANGE_START),
+    p = add(mul(base.p, 1 - q), mul(target.p, q)),
+    tangent = norm(
+      add(
+        add(
+          mul(base.t, track.lengths[lane] * (1 - q)),
+          mul(target.t, track.lengths[nextLane] * q),
+        ),
+        mul(sub(target.p, base.p), dqdu),
+      ),
+    );
+  let n = norm(add(mul(base.n, 1 - q), mul(target.n, q))),
+    side = norm(cross(tangent, n));
+  n = norm(cross(side, tangent));
+  const k = add(mul(base.k, 1 - q), mul(target.k, q));
+  return {
+    ...base,
+    p,
+    t: tangent,
+    n,
+    side,
+    k,
+    curvature: length(k),
+    bank: base.bank * (1 - q) + target.bank * q,
+    zone: "レーンチェンジャー",
+    gap: false,
+    brake: false,
+    loop: false,
+  };
+}
+
 export function atU(track: Track, lane: number, u: number) {
   const f = track.lanes[lane];
   return f[Math.min(N, Math.max(0, Math.round(u * N)))];

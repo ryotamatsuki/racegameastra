@@ -2,7 +2,7 @@ import * as T from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { buildCar, disposeObject, material, mesh, type CarModel } from "./car";
-import { sample, type Track } from "../simulation/track";
+import { LANE_CHANGE_START, routeSample, type Track } from "../simulation/track";
 import { type Race } from "../simulation/engine";
 import { updateCamera } from "../cameras/camera";
 import { type Setup, type Category } from "../../data/catalog";
@@ -376,9 +376,8 @@ export class Scene {
   }
   buildTrack(track: Track) {
     const road = material(0xe3e4d7, 0, 0.67),
-      walls = [0xdfb348, 0x9dafa5, 0xb9c4bb, 0x788f84].map((c) =>
-        material(c, 0.15, 0.48),
-      );
+      wallColors = [0xdfb348, 0x9dafa5, 0xb9c4bb, 0x788f84],
+      walls = wallColors.map((c) => material(c, 0.15, 0.48));
     for (let lane = 0; lane < 4; lane++) {
       const fs = track.lanes[lane];
       for (const type of ["road", "left", "right"] as const) {
@@ -401,7 +400,13 @@ export class Scene {
           }
           v.push(a.x, a.y, a.z, b.x, b.y, b.z);
           const k = (i / 4) * 2;
-          if (i > 0 && !f.gap && !fs[i - 4].gap)
+          if (
+            i > 0 &&
+            !f.gap &&
+            !fs[i - 4].gap &&
+            (type === "road" ||
+              (f.u < LANE_CHANGE_START && fs[i - 4].u < LANE_CHANGE_START))
+          )
             idx.push(k - 2, k - 1, k, k - 1, k + 1, k);
         }
         const g = new T.BufferGeometry();
@@ -413,6 +418,32 @@ export class Scene {
         mesh(g, m, this.content);
       }
     }
+    // Lane-change guides sit on the existing road bed. Removing only the
+    // internal walls in this short zone preserves the established course design
+    // while making the four smooth crossover routes visually explicit.
+    for (let lane = 0; lane < 4; lane++) {
+      const points: number[] = [],
+        len = track.lengths[lane];
+      for (let i = Math.floor(LANE_CHANGE_START * 2400); i < 2400; i += 8) {
+        const f = routeSample(track, lane, (i / 2400) * len);
+        points.push(f.p.x, f.p.y + 0.004, f.p.z);
+      }
+      const g = new T.BufferGeometry().setAttribute(
+        "position",
+        new T.Float32BufferAttribute(points, 3),
+      );
+      this.content.add(
+        new T.Line(
+          g,
+          new T.LineBasicMaterial({
+            color: wallColors[lane],
+            transparent: true,
+            opacity: 0.9,
+          }),
+        ),
+      );
+    }
+
     // Structural supports and clear start/finish markings.
     const support = material(0x526861, 0.55);
     for (let i = 0; i < track.lanes[0].length; i += 100) {
@@ -463,7 +494,7 @@ export class Scene {
     } else if (r) {
       r.cars.forEach((c, i) => {
         const model = this.raceModels[i],
-          f = sample(
+          f = routeSample(
             r.track,
             c.lane,
             c.previousS + (c.s - c.previousS) * alpha,

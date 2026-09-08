@@ -3,6 +3,9 @@ import {
   tracks,
   sample,
   atU,
+  routeSample,
+  RACE_LAPS,
+  LANE_COUNT,
   add,
   sub,
   mul,
@@ -18,7 +21,7 @@ export const tuning = {
   airDensity: 1.225,
   recoverySeconds: 2,
   maxOuts: 3,
-  maxTime: 180,
+  maxTime: 240,
   overloadSeconds: 0.32,
   voltageSag: 0.25,
   capacityScale: 8,
@@ -96,11 +99,11 @@ export function createRace(
 ): Race {
   const track = tracks[course],
     cars: Car[] = [];
-  const shift = ((seed % 4) + 4) % 4;
-  for (let id = 0; id < (mode === "race" ? 4 : 1); id++) {
+  const shift = ((seed % LANE_COUNT) + LANE_COUNT) % LANE_COUNT;
+  for (let id = 0; id < (mode === "race" ? LANE_COUNT : 1); id++) {
     const m = id === 0 ? machine : (id + seed) % 4,
       conf = id === 0 ? { ...setup } : standard(m),
-      lane = mode === "time" ? 1 : (id + shift) % 4;
+      lane = mode === "time" ? 1 : (id + shift) % LANE_COUNT;
     const f = sample(track, lane, 0);
     cars.push({
       id,
@@ -173,7 +176,7 @@ export function stepCar(c: Car, track: Track, time: number, dt = DT) {
     c.recover -= dt;
     if (c.recover <= 1e-9) {
       c.s = c.safeS;
-      c.p = sample(track, c.lane, c.s).p;
+      c.p = routeSample(track, c.lane, c.s).p;
       c.previousP = { ...c.p };
       c.previousS = c.s;
       c.state = "onTrack";
@@ -181,7 +184,7 @@ export function stepCar(c: Car, track: Track, time: number, dt = DT) {
     }
     return;
   }
-  let f = sample(track, c.lane, c.s);
+  let f = routeSample(track, c.lane, c.s);
   if (c.state === "airborne") {
     c.airTime += dt;
     const next = add(
@@ -303,7 +306,7 @@ export function stepCar(c: Car, track: Track, time: number, dt = DT) {
       c.charge -
         ((0.18 + mechanical) * dt) / (s.capacity * tuning.capacityScale),
     );
-    const next = sample(track, c.lane, c.s);
+    const next = routeSample(track, c.lane, c.s);
     c.p = next.p;
     if (next.gap && !f.gap) {
       const takeoff = atU(track, c.lane, 0.12 - 1 / 2400);
@@ -314,21 +317,37 @@ export function stepCar(c: Car, track: Track, time: number, dt = DT) {
       return;
     }
   }
-  const lap = Math.floor(c.s / len);
-  if (lap > c.lap) {
-    const fraction = (lap * len - c.previousS) / (c.s - c.previousS || 1);
-    const crossing = time - dt + Math.max(0, Math.min(1, fraction)) * dt;
+  const completedLap = Math.floor(c.s / len);
+  if (completedLap > c.lap) {
+    const boundary = (c.lap + 1) * len,
+      fraction = (boundary - c.previousS) / (c.s - c.previousS || 1),
+      crossing = time - dt + Math.max(0, Math.min(1, fraction)) * dt,
+      overflow = Math.max(0, c.s - boundary);
     c.lapTimes.push(crossing - c.lastLap);
     c.lastLap = crossing;
-    c.lap = lap;
-    if (c.lap >= 3) {
+    c.lap += 1;
+
+    // routeSample() has already converged to the next lane at u=1. Remap the
+    // cumulative arc coordinate to that lane so its different circumference
+    // cannot create a false lap or a render jump on the following tick.
+    c.lane = (c.lane + 1) % LANE_COUNT;
+    const nextLen = track.lengths[c.lane];
+    c.s = c.lap * nextLen + (c.lap >= RACE_LAPS ? 0 : overflow);
+    c.previousS = c.s;
+    c.safeS = c.lap * nextLen;
+    const after = routeSample(track, c.lane, c.s);
+    c.p = { ...after.p };
+    c.previousP = { ...c.p };
+
+    if (c.lap >= RACE_LAPS) {
       c.state = "finished";
       c.finish = crossing;
-      c.previousS = c.s; // Freeze the final render pose as well as physics.
       c.v = 0;
+      c.progress = RACE_LAPS;
+      return;
     }
   }
-  c.progress = c.lap + sample(track, c.lane, c.s).u;
+  c.progress = c.lap + routeSample(track, c.lane, c.s).u;
 }
 export function tick(r: Race, dt = DT) {
   if (r.phase === "countdown") {

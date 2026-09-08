@@ -18,7 +18,7 @@ Browser tests: `npx playwright install chromium`, then `npx playwright test`. To
 
 Drag to orbit, wheel/pinch to zoom; garage buttons for explosion, assembly, close-up and wheel test. Select a candidate part, inspect differences, then install. Three local save slots.
 
-Race: 1–5 selects camera, Space pauses while focus is inside the game, R requests retry confirmation. Touch buttons provide the same actions. Three laps, 2-second recovery, 3 outs = DNF, 180-second timeout. Time attack uses fixed lane 2; normal race displays seed-based fixed lane assignments.
+Race: 1–5 selects camera, Space pauses while focus is inside the game, R requests retry confirmation. Touch buttons provide the same actions. Four laps, 2-second recovery, 3 outs = DNF, 240-second timeout. Normal race and time attack both use the four-lane cycle: the seed determines only the starting lane, and the lane changer advances every car once per lap so all four lanes are traversed once.
 
 ## Deployment unblock
 
