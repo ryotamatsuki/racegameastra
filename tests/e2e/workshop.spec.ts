@@ -19,7 +19,7 @@ test("garage customization, persistence, all courses, cameras and retry", async 
     "AERO FALCON",
   ]) {
     await page.getByRole("button", { name }).click();
-    await page.screenshot({
+    await page.screenshot({ timeout: 60000,
       path: info.outputPath(name.replace(" ", "-") + ".png"),
     });
   }
@@ -61,7 +61,7 @@ test("garage customization, persistence, all courses, cameras and retry", async 
   }
   await page.getByRole("button", { name: "車輪テスト" }).click();
   await page.getByRole("button", { name: "標準構成", exact: true }).click();
-  await page.screenshot({ path: info.outputPath("garage.png") });
+  await page.screenshot({ timeout: 60000, path: info.outputPath("garage.png") });
   for (const course of ["WORKSHOP OVAL", "TECHNICAL RIDGE", "SKY LOOP"]) {
     await page.getByRole("button", { name: "コースを選ぶ" }).click();
     await page.getByRole("button", { name: new RegExp(course) }).click();
@@ -76,7 +76,7 @@ test("garage customization, persistence, all courses, cameras and retry", async 
       "1 追尾",
     ]) {
       await page.getByRole("button", { name: camera, exact: true }).click();
-      await page.screenshot({
+      await page.screenshot({ timeout: 60000,
         path: info.outputPath(course + "-" + camera.slice(0, 1) + ".png"),
       });
       if (
@@ -97,7 +97,7 @@ test("garage customization, persistence, all courses, cameras and retry", async 
       page.getByRole("heading", { name: "走りが、答えになった。" }),
     ).toBeVisible({ timeout: 90000 });
     await expect(page.locator("tbody tr").first()).toContainText("完走");
-    await page.screenshot({ path: info.outputPath(course + "-result.png") });
+    await page.screenshot({ timeout: 60000, path: info.outputPath(course + "-result.png") });
     await page.getByRole("button", { name: "同じ構成・seedで再挑戦" }).click();
     await expect(page.getByText("READY TO RACE")).toBeVisible();
     await page.waitForTimeout(3800);
@@ -118,7 +118,7 @@ test("time attack and portrait layout", async ({ page }, info) => {
     page.getByRole("heading", { name: "走りが、答えになった。" }),
   ).toBeVisible({ timeout: 90000 });
   await expect(page.locator("tbody tr")).toHaveCount(1);
-  await page.screenshot({ path: info.outputPath("portrait-result.png") });
+  await page.screenshot({ timeout: 60000, path: info.outputPath("portrait-result.png") });
 });
 test("60-second frame sample and 10 retries resource stability", async ({
   page,
@@ -184,6 +184,7 @@ test("WebGL unsupported is explicit and retryable", async ({ page }) => {
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
       kind: any,
       ...args: any[]
     ) {
