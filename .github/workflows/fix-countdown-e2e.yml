@@ -1,12 +1,12 @@
 name: Fix slow-render countdown regression
 on:
   push:
-    branches: [fix/four-lap-lane-change]
+    branches:
+      - fix/four-lap-lane-change
 permissions:
   contents: write
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, '[slow-countdown-fixed]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -70,11 +70,11 @@ async function waitForSuccessfulFinish(page: Page, timeout = 150000) {
           if s.count(old_portrait) != 1:
               raise SystemExit(f'portrait finish wait count={s.count(old_portrait)}')
           s = s.replace(old_portrait, '  await waitForSuccessfulFinish(page);')
-          portrait_start = '''  await page.goto("./");\n  await page.getByRole("button", { name: "ワークショップを開く" }).click();'''
-          portrait_new = '''  await page.goto("./");\n  await page.locator(".settings>summary").click();\n  await page.locator(".settings select").selectOption("low");\n  await page.locator(".settings>summary").click();\n  await page.getByRole("button", { name: "ワークショップを開く" }).click();'''
-          # Only the portrait test has this exact viewport immediately above; replace its occurrence by splitting there.
+
           marker = 'test("time attack and portrait layout"'
           before, after = s.split(marker, 1)
+          portrait_start = '''  await page.goto("./");\n  await page.getByRole("button", { name: "ワークショップを開く" }).click();'''
+          portrait_new = '''  await page.goto("./");\n  await page.locator(".settings>summary").click();\n  await page.locator(".settings select").selectOption("low");\n  await page.locator(".settings>summary").click();\n  await page.getByRole("button", { name: "ワークショップを開く" }).click();'''
           if portrait_start not in after:
               raise SystemExit('portrait setup target not found')
           after = after.replace(portrait_start, portrait_new, 1)
