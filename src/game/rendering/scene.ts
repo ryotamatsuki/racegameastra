@@ -405,7 +405,9 @@ export class Scene {
             !f.gap &&
             !fs[i - 4].gap &&
             (type === "road" ||
-              (f.u < LANE_CHANGE_START && fs[i - 4].u < LANE_CHANGE_START))
+              (f.u < LANE_CHANGE_START && fs[i - 4].u < LANE_CHANGE_START) ||
+              (type === "right" && lane === 0) ||
+              (type === "left" && lane === 3))
           )
             idx.push(k - 2, k - 1, k, k - 1, k + 1, k);
         }
