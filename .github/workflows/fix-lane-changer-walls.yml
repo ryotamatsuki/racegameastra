@@ -1,0 +1,42 @@
+name: Preserve lane changer outer walls
+on:
+  push:
+    branches: [fix/four-lap-lane-change]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[outer-walls-fixed]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/four-lap-lane-change
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.19.0'
+          cache: npm
+      - name: Keep only the two true exterior boundaries in the lane changer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/game/rendering/scene.ts')
+          s = p.read_text()
+          old = '''            (type === "road" ||\n              (f.u < LANE_CHANGE_START && fs[i - 4].u < LANE_CHANGE_START))\n'''
+          new = '''            (type === "road" ||\n              (f.u < LANE_CHANGE_START && fs[i - 4].u < LANE_CHANGE_START) ||\n              (type === "right" && lane === 0) ||\n              (type === "left" && lane === 3))\n'''
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Commit verified fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-lane-changer-walls.yml
+          git add src/game/rendering/scene.ts
+          git commit -m "fix: preserve lane changer outer walls [outer-walls-fixed]"
+          git push origin HEAD:fix/four-lap-lane-change
