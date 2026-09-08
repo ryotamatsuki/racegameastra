@@ -1,0 +1,32 @@
+
+> micro-racer-astra@1.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+✔ four original body meshes are geometrically distinct, finite and nonempty (50.100102ms)
+✔ repeated explosion and assembly preserve objects and restore placement (7.03164ms)
+✔ each category has three physically distinct options (0.863866ms)
+✔ render frame uses a right-handed orthonormal basis (7.134665ms)
+✔ catalog has 4 machines, 9 categories, 3 compatible parts each; all alter physics (3.501294ms)
+✔ A05 torque and gear reflect drive equation (0.243466ms)
+✔ standard machines finish oval (75.804865ms)
+✔ A09 same model has no player-specific physics (61.709571ms)
+✔ A10 30/60/120 rendering produces identical fixed steps (67.86746ms)
+✔ loop support sign and frame continuity (6.501915ms)
+✔ DNF time limit and finished records freeze (232.445663ms)
+✔ long frame requests pause without hidden catchup (0.284967ms)
+✔ A06 fixed-lane tradeoff reverses between oval and technical (30.915366ms)
+✔ A07 three-course standard Falcon completes with physical landings (27.118198ms)
+✔ A08 underpowered loop loses support and reaches DNF (18.04146ms)
+✔ all 4 machines finish oval on all seeded lanes (417.140971ms)
+✔ battery mass and discharge are coupled to drive (4.849056ms)
+✔ storage handles quota/access denial without throwing (1.066079ms)
+✔ storage validates corruption and unknown part IDs (0.972379ms)
+✔ three slots and settings restore exactly (0.332088ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1289.53675

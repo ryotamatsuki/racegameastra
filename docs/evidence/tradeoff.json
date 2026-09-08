@@ -1,0 +1,36 @@
+{
+  "a": {
+    "s": {
+      "body": "body-standard",
+      "chassis": "chassis-light",
+      "motor": "motor-speed",
+      "gear": "gear-speed",
+      "tire": "tire-large",
+      "roller": "roller-fast",
+      "battery": "battery-power",
+      "wing": "wing-small",
+      "brake": "brake-mid"
+    },
+    "t": [
+      14.037098748375344,
+      16.413672653336075
+    ]
+  },
+  "b": {
+    "s": {
+      "body": "body-standard",
+      "chassis": "chassis-light",
+      "motor": "motor-speed",
+      "gear": "gear-power",
+      "tire": "tire-grip",
+      "roller": "roller-fast",
+      "battery": "battery-power",
+      "wing": "wing-small",
+      "brake": "brake-mid"
+    },
+    "t": [
+      14.271415559220866,
+      15.84390241039979
+    ]
+  }
+}

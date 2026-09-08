@@ -20,7 +20,7 @@ export function stepCar(c:Car,track:Track,time:number,dt=DT){
  if(c.state==='finished'||c.state==='dnf')return;
  c.previousS=c.s;c.previousP={...c.p};
  const len=track.lengths[c.lane],s=c.stats;
- if(c.state==='recovering'){c.recover-=dt;if(c.recover<=0){c.s=c.safeS;c.p=sample(track,c.lane,c.s).p;c.previousP={...c.p};c.previousS=c.s;c.state='onTrack';c.overload=0;}return;}
+ if(c.state==='recovering'){c.recover-=dt;if(c.recover<=1e-9){c.s=c.safeS;c.p=sample(track,c.lane,c.s).p;c.previousP={...c.p};c.previousS=c.s;c.state='onTrack';c.overload=0;}return;}
  let f=sample(track,c.lane,c.s);
  if(c.state==='airborne'){
   c.airTime+=dt;const next=add(c.p,add(mul(c.velocity,dt),{x:0,y:-.5*tuning.gravity*dt*dt,z:0}));c.velocity.y-=tuning.gravity*dt;

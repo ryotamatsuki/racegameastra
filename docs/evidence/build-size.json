@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "path": "dist/index.html",
+      "raw_bytes": 1201,
+      "gzip_bytes": 843
+    },
+    {
+      "path": "dist/assets/index-B-ytIBZl.js",
+      "raw_bytes": 775476,
+      "gzip_bytes": 214040
+    },
+    {
+      "path": "dist/assets/index-DSMq0ari.css",
+      "raw_bytes": 16151,
+      "gzip_bytes": 4216
+    },
+    {
+      "path": "dist/assets/index-DV6lNMRB.js",
+      "raw_bytes": 775424,
+      "gzip_bytes": 213993
+    }
+  ],
+  "total_gzip_bytes": 433092,
+  "note": "Local gzip estimate; not measured HTTP transfer"
+}
