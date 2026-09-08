@@ -40,3 +40,11 @@ Owner action required: repository Settings → Pages → Source → GitHub Actio
 ## Required remaining confirmation
 
 Inspect successful headless screenshots and fix any defects; run public deployment after enablement; open and play the actual public URL; collect actual device/browser and 60-second performance samples, and 10-retry resource behavior. Any unperformed test remains BLOCKED. There is no claim of 60 FPS, iPhone compatibility, or public availability at this stage.
+
+## Follow-up verification (2026-09-08)
+
+- Main `cef84eee87c2dba8dd6b120d48f5383a4cedf52a`: CI failed because the WebGL fault-injection test lacked a TypeScript `this` annotation. Browser run 34210772129 failed during the first full-resolution screenshot (15-second timeout); nine tests did not run. These runs are FAIL, not acceptance PASS.
+- The retained Chromium trace image was visually inspected: TORQUE BISON has a curved orange shell, canopy, separate wheels/hubs, rollers, wing, shadows and a rendered workbench. This proves this captured frame rendered, not completion of all visual acceptance tests.
+- Fix `85be114bed694d443bfc3ce2a6e914b06177f9d5`: annotate the receiver and allow 60 seconds for software-rendered screenshots. Local typecheck/build and all 20 tests pass. Clean CI build job 102102288849 also passes.
+- Pages run 34238490431 still fails initial creation with `Resource not accessible by integration` (deploy job 102102417139). Initial Pages configuration remains an owner/admin action. No published-game success is claimed.
+- Browser rerun: https://github.com/ryotamatsuki/racegameastra/actions/runs/34238490476 . FAIL: all four machine screenshots were captured and nine-category installation/save restoration passed their assertions, but the 180-second test-wide timeout expired during explosion/focus operations. Nine remaining tests did not run. No camera, finish, phone-performance or public-environment PASS is inferred. Follow-up uses the actual quality settings UI to select low after medium-quality machine captures, with a 480-second functional test budget.

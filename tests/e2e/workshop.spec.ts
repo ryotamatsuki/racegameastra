@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 test("garage customization, persistence, all courses, cameras and retry", async ({
   page,
 }, info) => {
+  test.setTimeout(480000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("response", (r) => {
@@ -23,6 +24,10 @@ test("garage customization, persistence, all courses, cameras and retry", async 
       path: info.outputPath(name.replace(" ", "-") + ".png"),
     });
   }
+  await page.locator(".settings>summary").click();
+  await page.locator(".settings select").selectOption("low");
+  await page.locator(".settings>summary").click();
+  info.annotations.push({ type: "quality", description: "Four machine captures: medium. Subsequent functional checks: low via settings UI, software GPU." });
   const cats = [
     "ボディー",
     "シャーシ",
