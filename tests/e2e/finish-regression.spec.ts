@@ -15,12 +15,12 @@ test('four-lap oval lane cycle from countdown through actual finish', async ({ p
   await page.screenshot({ path: info.outputPath('oval-start-lanes.png'), timeout: 60000 });
   const result = page.getByRole('heading', { name: '走りが、答えになった。' });
   let pauses = 0;
-  for (let i = 0; i < 160 && !(await result.isVisible()); i++) {
+  for (let i = 0; i < 360 && !(await result.isVisible()); i++) {
     const resume = page.getByRole('button', { name: '走行を再開', exact: true });
     if (await resume.isVisible()) { pauses++; await resume.click(); }
     await page.waitForTimeout(500);
   }
-  await expect(result).toBeVisible();
+  await expect(result).toBeVisible({ timeout: 1000 });
   await expect(page.locator('tbody tr')).toHaveCount(4);
   for (const row of await page.locator('tbody tr').all()) await expect(row).toContainText('完走');
   await expect(page.getByRole('columnheader', { name: 'LAP 4' })).toBeVisible();

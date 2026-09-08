@@ -89,12 +89,19 @@ export function App() {
       last = now;
       const r = race.current;
       if (r && screenRef.current === "race") {
-        if (
-          !clock.current.advance(dt, () => tick(r)) &&
-          r.phase === "running"
-        ) {
-          r.phase = "paused";
-          setNotice("処理が遅延したため停止しました。再開してください。");
+        const phaseBeforeAdvance = r.phase,
+          advanced = clock.current.advance(dt, () => tick(r));
+        if (!advanced) {
+          if (phaseBeforeAdvance === "countdown") {
+            // Countdown is presentation time, not vehicle physics. A very slow
+            // render frame must not deadlock READY forever; advance it by at
+            // most one second while still discarding any physics catch-up.
+            tick(r, Math.min(dt, 1));
+            clock.current.accumulator = 0;
+          } else if (phaseBeforeAdvance === "running") {
+            r.phase = "paused";
+            setNotice("処理が遅延したため停止しました。再開してください。");
+          }
         }
         if (r.cars[0].events.length > events) {
           events = r.cars[0].events.length;
