@@ -59,7 +59,15 @@ function raw(
     z = r * Math.sin(a),
     y = 0.42,
     bank = 0;
-  if (id === 0) y += 0.14 * Math.pow(Math.sin(a), 4);
+  if (id === 0) {
+    // Parallel lanes offset along the ellipse normal. Changing only the
+    // short radius collapses every lane at the start/finish and opposite end.
+    const outward = norm({ x: Math.cos(a) / 6, y: 0, z: Math.sin(a) / 3.3 });
+    const offset = (lane - 1.5) * 0.16;
+    x = 6 * Math.cos(a) + outward.x * offset;
+    z = 3.3 * Math.sin(a) + outward.z * offset;
+    y += 0.14 * Math.pow(Math.sin(a), 4);
+  }
   if (id === 1) {
     const R = 1.5 + (lane - 1.5) * 0.16;
     if (u < 0.25) {

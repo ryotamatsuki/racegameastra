@@ -156,3 +156,46 @@ test("battery mass and discharge are coupled to drive", () => {
   assert.ok(driveForce(b, 0, 0.1) < driveForce(b, 0, 1));
   assert.ok(runBench(standard(0), 0).charge < 1);
 });
+test("all courses keep four lane centers separated, including start and finish", () => {
+  for (const track of tracks)
+    for (let i = 0; i <= 2400; i++) {
+      const frames = track.lanes.map((lane) => lane[i]);
+      for (let lane = 0; lane < 3; lane++)
+        assert.ok(
+          length(sub(frames[lane].p, frames[lane + 1].p)) >= 0.1599,
+          `collapsed lane: course ${track.id}, sample ${i}, lane ${lane}`,
+        );
+    }
+});
+test("stationary cars never receive laps or a finish on any course", () => {
+  for (let course = 0; course < 3; course++) {
+    const r = createRace(0, standard(0), course, 731);
+    r.phase = "running";
+    r.cars.forEach((c) => (c.stats.torque = 0));
+    while (r.phase === "running") tick(r);
+    for (const c of r.cars) {
+      assert.equal(c.state, "dnf");
+      assert.equal(c.finish, null);
+      assert.equal(c.lap, 0);
+      assert.deepEqual(c.lapTimes, []);
+    }
+  }
+});
+test("finish requires three traversed laps and freezes a distinct lane pose", () => {
+  for (let course = 0; course < 3; course++)
+    for (let machine = 0; machine < 4; machine++) {
+      const r = createRace(machine, standard(machine), course, 731);
+      r.phase = "running";
+      while (r.phase === "running") {
+        tick(r);
+        for (const c of r.cars) {
+          if (c.finish === null) assert.notEqual(c.state, "finished");
+          else {
+            assert.ok(c.s >= 3 * r.track.lengths[c.lane]);
+            assert.equal(c.lapTimes.length, 3);
+            assert.equal(c.previousS, c.s);
+          }
+        }
+      }
+    }
+});

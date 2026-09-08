@@ -104,7 +104,7 @@ export function App() {
           wasFinished = true;
           audio.current.beep(1100);
           const finish = r.cars[0].finish;
-          const key = r.mode + ":" + r.track.id,
+          const key = r.mode + ":" + r.track.id + (r.track.id === 0 ? ":lanes-v2" : ""),
             old = saveRef.current.bests[key];
           if (finish !== null) {
             setBestMessage(
@@ -576,7 +576,7 @@ export function App() {
                   <small>
                     基準レーン {t.lengths[1].toFixed(1)} m / 3 LAPS
                     <br />
-                    BEST {time(saved.bests[mode + ":" + i] ?? null)}
+                    BEST {time(saved.bests[mode + ":" + i + (i === 0 ? ":lanes-v2" : "")] ?? null)}
                   </small>
                 </button>
               ))}

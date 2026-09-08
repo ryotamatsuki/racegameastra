@@ -324,6 +324,7 @@ export function stepCar(c: Car, track: Track, time: number, dt = DT) {
     if (c.lap >= 3) {
       c.state = "finished";
       c.finish = crossing;
+      c.previousS = c.s; // Freeze the final render pose as well as physics.
       c.v = 0;
     }
   }

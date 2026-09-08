@@ -1,0 +1,31 @@
+name: Public finish regression
+on:
+  workflow_run:
+    workflows: ["CI and GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-finish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.19.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/finish-regression.spec.ts --project=chromium-desktop
+        env:
+          PUBLIC_URL: https://ryotamatsuki.github.io/racegameastra/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-finish-evidence
+          path: |
+            test-results/
+            playwright-report/
