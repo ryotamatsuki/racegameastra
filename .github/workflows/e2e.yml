@@ -1,7 +1,5 @@
 name: Browser acceptance
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_run:
     workflows: ["CI and GitHub Pages"]
@@ -16,7 +14,14 @@ permissions:
   contents: read
 jobs:
   browser:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Pull requests run once against the local test server. After a real Pages
+    # deployment, the same full suite runs once against the public site.
+    # Ignore workflow_run events produced by pull-request-only Pages builds so
+    # that opening/updating a PR does not run the same browser matrix twice.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'pull_request')
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +43,9 @@ jobs:
         if: always()
         with:
           name: browser-evidence-${{ matrix.project }}
-          path: |
-            test-results/
-            playwright-report/
+          # Playwright's HTML report already carries retained failure traces and
+          # attachments. Uploading test-results/ as well stores those traces a
+          # second time without adding diagnostic value.
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 1
