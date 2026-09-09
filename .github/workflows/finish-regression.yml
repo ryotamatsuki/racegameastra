@@ -1,14 +1,13 @@
 name: Public finish regression
 on:
-  workflow_run:
-    workflows: ["CI and GitHub Pages"]
-    types: [completed]
+  # The full Browser acceptance workflow already executes
+  # tests/e2e/finish-regression.spec.ts on desktop and mobile. Keep this
+  # dedicated public-site check available for targeted manual diagnosis only.
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   public-finish:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -26,6 +25,6 @@ jobs:
         if: always()
         with:
           name: public-finish-evidence
-          path: |
-            test-results/
-            playwright-report/
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 1
